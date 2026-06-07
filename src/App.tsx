@@ -159,6 +159,7 @@ export default function App() {
   const [exportShowHasyiyah, setExportShowHasyiyah] = useState<boolean>(true);
   const [exportShowTaliq, setExportShowTaliq] = useState<boolean>(true);
   const [exportStyleKitabKuning, setExportStyleKitabKuning] = useState<boolean>(true);
+  const [exportMarginLayout, setExportMarginLayout] = useState<"standard" | "left" | "both">("both");
   const [exportMobileTab, setExportMobileTab] = useState<"options" | "preview">("options");
 
   const [newChapterTitle, setNewChapterTitle] = useState<string>("");
@@ -856,7 +857,8 @@ export default function App() {
           showSyarah: exportShowSyarah,
           showHasyiyah: exportShowHasyiyah,
           showTaliq: exportShowTaliq,
-          styleKitabKuning: exportStyleKitabKuning
+          styleKitabKuning: exportStyleKitabKuning,
+          marginLayout: exportMarginLayout
         });
         showNotif("Modul cetak PDF berhasil diinisialisasi!", "success");
       } else if (exportFormat === "docx") {
@@ -872,7 +874,8 @@ export default function App() {
           showSyarah: exportShowSyarah,
           showHasyiyah: exportShowHasyiyah,
           showTaliq: exportShowTaliq,
-          styleKitabKuning: exportStyleKitabKuning
+          styleKitabKuning: exportStyleKitabKuning,
+          marginLayout: exportMarginLayout
         })
           .then(() => {
             showNotif("Word dokumen (.docx) berhasil diunduh!", "success");
@@ -1299,6 +1302,87 @@ export default function App() {
           .section { margin: 20px 0; }
           .section-title { color: #0f172a; font-size: 18px; border-right: 4px solid #16a34a; padding-right: 12px; font-family: sans-serif; }
           .line { margin: 25px 0; background: #fafafa; padding: 18px; border-radius: 8px; border: 1px solid #eee; break-inside: avoid; }
+
+          /* Marginal Layout CSS styles */
+          .margin-container-row {
+            display: flex;
+            gap: 16px;
+            align-items: stretch;
+            direction: rtl; /* Flow lines Right to Left */
+            margin-bottom: 30px;
+            break-inside: avoid;
+            width: 100%;
+          }
+
+          .center-text-frame {
+            flex: 2.2;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            padding: 24px;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            background-color: #fafafa;
+          }
+
+          .kitab-kuning-theme .center-text-frame {
+            background-color: #fdfaf3 !important;
+            border: 4px double #c49662 !important; /* Authentic double borders just like the vintage plates in the picture! */
+            border-radius: 4px;
+            padding: 24px;
+          }
+
+          .side-commentary-margin {
+            flex: 0.9;
+            min-width: 130px;
+            max-width: 250px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            padding: 14px;
+            background-color: #ffffff;
+            border-radius: 6px;
+            border: 1px dashed #d1d5db;
+            justify-content: flex-start;
+            font-size: 11px;
+          }
+
+          .kitab-kuning-theme .side-commentary-margin {
+            background-color: #fbf8f0 !important;
+            border: 1px solid #eedec4 !important;
+            border-radius: 4px;
+          }
+
+          .margin-left-border {
+            border-left: 3px solid #6b21a8;
+          }
+          .kitab-kuning-theme .margin-left-border {
+            border-left: 3px solid #ad8053 !important;
+          }
+
+          .margin-right-border {
+            border-right: 3px solid #b45309;
+          }
+          .kitab-kuning-theme .margin-right-border {
+            border-right: 3px solid #ad8053 !important;
+          }
+
+          .empty-margin {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            opacity: 0.5;
+            text-align: center;
+            border-style: dotted !important;
+          }
+          .decorative-leaf {
+            font-size: 14px;
+            color: #c49662;
+            opacity: 0.7;
+            margin-bottom: 4px;
+          }
           .arabic-container { display: flex; flex-wrap: wrap; justify-content: flex-start; gap: 12px; margin-bottom: 12px; line-height: 2.6; }
           
           .word-block { display: inline-flex; flex-direction: column; align-items: center; min-width: 44px; }
@@ -1497,10 +1581,13 @@ export default function App() {
               ${ch.sections.map(sec => `
                 <div class="section">
                   <h3 class="section-title">${sec.title}</h3>
-                  ${sec.lines.map(line => `
-                    <div class="line">
+                  ${sec.lines.map(line => {
+                    const hasWords = line.words && line.words.length > 0;
+                    const marginLayout = exportMarginLayout || "both";
+
+                    const arabicRowHtml = `
                       <div class="arabic-container">
-                        ${(line.words && line.words.length > 0 && exportShowMakna) ? 
+                        ${(hasWords && exportShowMakna) ? 
                           line.words.map(w => `
                             <div class="word-block">
                               <span class="arabic-word">${w.arabic}</span>
@@ -1511,42 +1598,121 @@ export default function App() {
                           : `<span style="font-size: 24px; font-weight: bold; font-family: 'Scheherazade New', 'Amiri', serif;">${line.arabicFull}</span>`
                         }
                       </div>
+                    `;
 
-                      ${(exportShowTranslation && line.translationFull) ? `
-                        <div class="translation-full">
-                          <strong>Makna:</strong> ${line.translationFull}
-                        </div>
-                      ` : ""}
+                    const translationHtml = (exportShowTranslation && line.translationFull) ? `
+                      <div class="translation-full">
+                        <strong>Makna:</strong> ${line.translationFull}
+                      </div>
+                    ` : "";
 
-                      ${showMatan && line.matan ? `
-                        <div class="layer-matan">
-                          <span class="layer-badge matan-badge">MATAN</span>
-                          <span class="arabic-text-serif" dir="rtl">${line.matan}</span>
-                        </div>
-                      ` : ""}
+                    const matanHtml = showMatan && line.matan ? `
+                      <div class="layer-matan">
+                        <span class="layer-badge matan-badge">MATAN</span>
+                        <span class="arabic-text-serif" dir="rtl">${line.matan}</span>
+                      </div>
+                    ` : "";
 
-                      ${showSyarah && (line.syarah || line.notes) ? `
-                        <div class="layer-syarah">
-                          <span class="layer-badge syarah-badge">SYARAH</span>
-                          <p class="commentary-text">${line.syarah || line.notes}</p>
-                        </div>
-                      ` : ""}
+                    const syarahHtml = showSyarah && (line.syarah || line.notes) ? `
+                      <div class="layer-syarah">
+                        <span class="layer-badge syarah-badge">SYARAH</span>
+                        <p class="commentary-text">${line.syarah || line.notes}</p>
+                      </div>
+                    ` : "";
 
-                      ${showHasyiyah && line.hasyiyah ? `
-                        <div class="layer-hasyiyah">
-                          <span class="layer-badge hasyiyah-badge">HASYIYAH</span>
-                          <p class="commentary-text">${line.hasyiyah}</p>
-                        </div>
-                      ` : ""}
+                    const hasyiyahHtml = showHasyiyah && line.hasyiyah ? `
+                      <div class="layer-hasyiyah">
+                        <span class="layer-badge hasyiyah-badge">HASYIYAH</span>
+                        <p class="commentary-text">${line.hasyiyah}</p>
+                      </div>
+                    ` : "";
 
-                      ${showTaliq && line.taliq ? `
-                        <div class="layer-taliq">
-                          <span class="layer-badge taliq-badge">TA'LIQ</span>
-                          <p class="commentary-text">${line.taliq}</p>
+                    const taliqHtml = showTaliq && line.taliq ? `
+                      <div class="layer-taliq">
+                        <span class="layer-badge taliq-badge">TA'LIQ</span>
+                        <p class="commentary-text">${line.taliq}</p>
+                      </div>
+                    ` : "";
+
+                    if (marginLayout === "standard") {
+                      return `
+                        <div class="line">
+                          ${arabicRowHtml}
+                          ${translationHtml}
+                          ${matanHtml}
+                          ${syarahHtml}
+                          ${hasyiyahHtml}
+                          ${taliqHtml}
                         </div>
-                      ` : ""}
-                    </div>
-                  `).join("")}
+                      `;
+                    } else if (marginLayout === "left") {
+                      const hasLeftCommentary = syarahHtml || hasyiyahHtml || taliqHtml;
+                      return `
+                        <div class="margin-container-row">
+                          <!-- Main Content Center Block -->
+                          <div class="center-text-frame">
+                            ${arabicRowHtml}
+                            ${matanHtml}
+                            ${translationHtml}
+                          </div>
+                          
+                          <!-- Left Marginal Commentary Block -->
+                          ${hasLeftCommentary ? `
+                            <div class="side-commentary-margin margin-left-border">
+                              ${syarahHtml}
+                              ${hasyiyahHtml}
+                              ${taliqHtml}
+                            </div>
+                          ` : `
+                            <div class="side-commentary-margin margin-left-border empty-margin">
+                              <span class="decorative-leaf">✿</span>
+                              <span style="font-size: 9px; color: #a47c5c; opacity: 0.6; font-family: monospace;">HASYIYAH</span>
+                            </div>
+                          `}
+                        </div>
+                      `;
+                    } else {
+                      // Both (Dua Sisi Kiri-Kanan)
+                      const hasLeftCommentary = syarahHtml || hasyiyahHtml;
+                      const hasRightCommentary = taliqHtml;
+                      
+                      return `
+                        <div class="margin-container-row">
+                          <!-- Right Marginal Block -->
+                          ${hasRightCommentary ? `
+                            <div class="side-commentary-margin margin-right-border">
+                              ${taliqHtml}
+                            </div>
+                          ` : `
+                            <div class="side-commentary-margin margin-right-border empty-margin">
+                              <span class="decorative-leaf">✿</span>
+                              <span style="font-size: 8px; color: #a47c5c; opacity: 0.6; font-family: monospace;">TA'LIQ</span>
+                            </div>
+                          `}
+
+                          <!-- Main Content Center Block -->
+                          <div class="center-text-frame">
+                            ${arabicRowHtml}
+                            ${matanHtml}
+                            ${translationHtml}
+                          </div>
+
+                          <!-- Left Marginal Block -->
+                          ${hasLeftCommentary ? `
+                            <div class="side-commentary-margin margin-left-border">
+                              ${syarahHtml}
+                              ${hasyiyahHtml}
+                            </div>
+                          ` : `
+                            <div class="side-commentary-margin margin-left-border empty-margin">
+                              <span class="decorative-leaf">✿</span>
+                              <span style="font-size: 8px; color: #a47c5c; opacity: 0.6; font-family: monospace;">HASYIYAH</span>
+                            </div>
+                          `}
+                        </div>
+                      `;
+                    }
+                  }).join("")}
                 </div>
               `).join("")}
             </div>
@@ -1619,6 +1785,10 @@ export default function App() {
         }, 0)
       , 0)
     : 0;
+
+  const isSepia = config.theme === "sepia";
+  const isLight = config.theme === "light";
+  const isDark = !isSepia && !isLight;
 
   return (
     <div id="app-root" className="flex flex-col h-screen w-full bg-[#0d0d0d] text-zinc-350 font-sans overflow-hidden border border-zinc-900 leading-normal select-none">
@@ -1953,14 +2123,83 @@ export default function App() {
         </AnimatePresence>
 
         {/* AREA TENGAH: Editor Utama & Workspace */}
-        <main className="flex-1 flex flex-col bg-[#0a0a0a] overflow-hidden">
+        <main className={`flex-1 flex flex-col overflow-hidden transition-colors duration-200 ${
+          isSepia
+            ? "bg-[#faf4e6]"
+            : isLight
+              ? "bg-zinc-50"
+              : "bg-[#0a0a0a]"
+        }`}>
           
           {/* Preferences Sub-drawer */}
           {showPreferences && (
-            <div className="p-4 bg-[#141414] border-b border-zinc-900 flex flex-wrap items-center justify-between gap-4 text-xs animate-slideDown">
+            <div className={`p-4 border-b flex flex-wrap items-center justify-between gap-4 text-xs animate-slideDown transition-colors duration-200 ${
+              isSepia
+                ? "bg-[#f3ead3] border-[#ebd6bd]"
+                : isLight
+                  ? "bg-zinc-100 border-zinc-200"
+                  : "bg-[#141414] border-zinc-900"
+            }`}>
               <div className="flex flex-wrap items-center gap-6">
+                
+                {/* Tema Selector */}
+                <div className={`flex items-center gap-2 pr-4 border-r ${
+                  isSepia ? "border-[#ebd6bd]" : isLight ? "border-zinc-300" : "border-zinc-800"
+                }`}>
+                  <span className={`font-semibold ${isSepia ? "text-[#5c3c26]" : isLight ? "text-zinc-700" : "text-zinc-400"}`}>
+                    Tema Editor:
+                  </span>
+                  <div className={`flex rounded p-0.5 gap-1 border ${
+                    isSepia
+                      ? "bg-[#faf4e6] border-[#ebd6bd]"
+                      : isLight
+                        ? "bg-white border-zinc-300"
+                        : "bg-[#1d1d1d] border-zinc-850"
+                  }`}>
+                    <button
+                      type="button"
+                      onClick={() => setConfig({ ...config, theme: "dark" })}
+                      className={`px-2 py-0.5 rounded text-[10px] uppercase font-bold transition-all cursor-pointer ${
+                        config.theme === "dark"
+                          ? "bg-emerald-600 text-white"
+                          : isSepia
+                            ? "text-[#a8733e] hover:text-[#5c3c26]"
+                            : "text-zinc-500 hover:text-zinc-350"
+                      }`}
+                    >
+                      Gelap
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConfig({ ...config, theme: "light" })}
+                      className={`px-2 py-0.5 rounded text-[10px] uppercase font-bold transition-all cursor-pointer ${
+                        config.theme === "light"
+                          ? "bg-emerald-600 text-white"
+                          : isSepia
+                            ? "text-[#a8733e] hover:text-[#5c3c26]"
+                            : "text-zinc-500 hover:text-zinc-850"
+                      }`}
+                    >
+                      Terang
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConfig({ ...config, theme: "sepia" })}
+                      className={`px-2 py-0.5 rounded text-[10px] uppercase font-bold transition-all cursor-pointer ${
+                        config.theme === "sepia"
+                          ? "bg-amber-700 text-white"
+                          : isSepia
+                            ? "text-[#a8733e] hover:text-[#5c3c26]"
+                            : "text-zinc-500 hover:text-amber-600"
+                      }`}
+                    >
+                      Kertas Kuno
+                    </button>
+                  </div>
+                </div>
+
                 <div className="flex items-center gap-2">
-                  <span className="text-zinc-400 font-medium">Ukuran Teks Arab:</span>
+                  <span className={`${isSepia ? "text-[#5c3c26]" : isLight ? "text-zinc-700" : "text-zinc-400"} font-medium`}>Ukuran Teks Arab:</span>
                   <input
                     type="range"
                     min="20"
@@ -1969,11 +2208,11 @@ export default function App() {
                     onChange={(e) => setConfig({ ...config, fontSizeArabic: Number(e.target.value) })}
                     className="w-24 accent-emerald-500"
                   />
-                  <span className="text-emerald-400 font-mono">{config.fontSizeArabic}px</span>
+                  <span className={`${isSepia ? "text-[#8c4f2b]" : "text-emerald-400"} font-mono`}>{config.fontSizeArabic}px</span>
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <span className="text-zinc-400 font-medium">Ukuran Terjemah:</span>
+                  <span className={`${isSepia ? "text-[#5c3c26]" : isLight ? "text-zinc-700" : "text-zinc-400"} font-medium`}>Ukuran Terjemah:</span>
                   <input
                     type="range"
                     min="11"
@@ -1982,7 +2221,7 @@ export default function App() {
                     onChange={(e) => setConfig({ ...config, fontSizeTranslation: Number(e.target.value) })}
                     className="w-24 accent-emerald-500"
                   />
-                  <span className="text-emerald-400 font-mono">{config.fontSizeTranslation}px</span>
+                  <span className={`${isSepia ? "text-[#8c4f2b]" : "text-emerald-400"} font-mono`}>{config.fontSizeTranslation}px</span>
                 </div>
 
                 <label className="flex items-center gap-2 cursor-pointer">
@@ -1992,7 +2231,7 @@ export default function App() {
                     onChange={(e) => setConfig({ ...config, showWordMakna: e.target.checked })}
                     className="rounded border-zinc-850 text-emerald-600 focus:ring-emerald-500 focus:ring-opacity-25"
                   />
-                  <span className="text-zinc-400 font-medium">Tampilkan Makna Per-kata (Jenggot)</span>
+                  <span className={`${isSepia ? "text-[#5c3c26]" : isLight ? "text-zinc-700" : "text-zinc-400"} font-medium`}>Tampilkan Makna Per-kata (Jenggot)</span>
                 </label>
 
                 <label className="flex items-center gap-2 cursor-pointer">
@@ -2002,7 +2241,7 @@ export default function App() {
                     onChange={(e) => setConfig({ ...config, showFullTranslation: e.target.checked })}
                     className="rounded border-zinc-850 text-emerald-600 focus:ring-emerald-500 focus:ring-opacity-25"
                   />
-                  <span className="text-zinc-400 font-medium">Tampilkan Terjemahan Penuh</span>
+                  <span className={`${isSepia ? "text-[#5c3c26]" : isLight ? "text-zinc-700" : "text-zinc-400"} font-medium`}>Tampilkan Terjemahan Penuh</span>
                 </label>
 
                 <label className="flex items-center gap-2 cursor-pointer">
@@ -2012,7 +2251,7 @@ export default function App() {
                     onChange={(e) => setConfig({ ...config, showNotes: e.target.checked })}
                     className="rounded border-zinc-850 text-emerald-600 focus:ring-emerald-500 focus:ring-opacity-25"
                   />
-                  <span className="text-zinc-400 font-medium">Tampilkan Struktur Syarah & Catatan</span>
+                  <span className={`${isSepia ? "text-[#5c3c26]" : isLight ? "text-zinc-700" : "text-zinc-400"} font-medium`}>Tampilkan Struktur Syarah & Catatan</span>
                 </label>
 
                 {config.showNotes && (
@@ -2024,7 +2263,7 @@ export default function App() {
                         onChange={(e) => setConfig({ ...config, showMatan: e.target.checked })}
                         className="rounded border-zinc-850 text-amber-500 focus:ring-amber-500 focus:ring-opacity-25"
                       />
-                      <span className="text-zinc-450">Tampilkan Matan (متن)</span>
+                      <span className={isSepia ? "text-[#5c3c26]" : "text-zinc-455"}>Tampilkan Matan (متن)</span>
                     </label>
 
                     <label className="flex items-center gap-2 cursor-pointer text-xs">
@@ -2034,7 +2273,7 @@ export default function App() {
                         onChange={(e) => setConfig({ ...config, showSyarah: e.target.checked })}
                         className="rounded border-zinc-850 text-emerald-500 focus:ring-emerald-500 focus:ring-opacity-25"
                       />
-                      <span className="text-zinc-455">Tampilkan Syarah (شرح)</span>
+                      <span className={isSepia ? "text-[#5c3c26]" : "text-zinc-455"}>Tampilkan Syarah (شرح)</span>
                     </label>
 
                     <label className="flex items-center gap-2 cursor-pointer text-xs">
@@ -2044,7 +2283,7 @@ export default function App() {
                         onChange={(e) => setConfig({ ...config, showHasyiyah: e.target.checked })}
                         className="rounded border-zinc-850 text-indigo-500 focus:ring-indigo-500 focus:ring-opacity-25"
                       />
-                      <span className="text-zinc-455">Tampilkan Hasyiyah (حاشية)</span>
+                      <span className={isSepia ? "text-[#5c3c26]" : "text-zinc-455"}>Tampilkan Hasyiyah (حاشية)</span>
                     </label>
 
                     <label className="flex items-center gap-2 cursor-pointer text-xs">
@@ -2054,7 +2293,7 @@ export default function App() {
                         onChange={(e) => setConfig({ ...config, showTaliq: e.target.checked })}
                         className="rounded border-zinc-850 text-rose-500 focus:ring-rose-500 focus:ring-opacity-25"
                       />
-                      <span className="text-zinc-455">Tampilkan Ta'liq (تعليق)</span>
+                      <span className={isSepia ? "text-[#5c3c26]" : "text-zinc-455"}>Tampilkan Ta'liq (تعليق)</span>
                     </label>
                   </div>
                 )}
@@ -2062,7 +2301,9 @@ export default function App() {
 
               <button
                 onClick={() => setShowPreferences(false)}
-                className="text-zinc-500 hover:text-zinc-300 text-xs flex items-center gap-1"
+                className={`text-xs flex items-center gap-1 transition-colors ${
+                  isSepia ? "text-[#a8733e] hover:text-[#5c3c26]" : "text-zinc-500 hover:text-zinc-350"
+                }`}
               >
                 <X size={13} />
                 <span>Tutup Panel</span>
@@ -2127,14 +2368,20 @@ export default function App() {
             <div className={`flex flex-col flex-1 ${splitViewMode ? "border-r border-zinc-900" : ""} overflow-hidden`}>
               
               {/* Context Selector Bar */}
-              <div className="bg-[#101010] border-b border-zinc-900 px-4 py-2 flex items-center justify-between text-xs text-zinc-400">
+              <div className={`border-b px-4 py-2 flex items-center justify-between text-xs transition-colors duration-200 ${
+                isSepia
+                  ? "bg-[#ebd6bd]/30 border-[#ebd6bd] text-[#5c3c26]"
+                  : isLight
+                    ? "bg-zinc-100 border-zinc-200 text-zinc-600"
+                    : "bg-[#101010] border-zinc-900 text-zinc-400"
+              }`}>
                 <div className="flex items-center gap-1.5">
-                  <span className="font-semibold text-zinc-300">Kitab Asli:</span>
+                  <span className={`font-semibold ${isSepia ? "text-[#3d2414]" : isLight ? "text-zinc-800" : "text-zinc-300"}`}>Kitab Asli:</span>
                   <span>{currentChapter?.title || "Draf Utama"}</span>
                   {currentSection && (
                     <>
-                      <ChevronRight size={13} className="text-zinc-700" />
-                      <span className="text-emerald-500">{currentSection.title}</span>
+                      <ChevronRight size={13} className={isSepia ? "text-[#a8733e]" : isLight ? "text-zinc-400" : "text-zinc-700"} />
+                      <span className="text-emerald-600 font-medium">{currentSection.title}</span>
                     </>
                   )}
                 </div>
@@ -2142,7 +2389,13 @@ export default function App() {
                 <div className="flex items-center gap-2">
                   <button
                     onClick={handleAddEmptyLine}
-                    className="flex items-center gap-1 px-3 py-1 bg-emerald-950/80 hover:bg-emerald-900 text-emerald-400 border border-emerald-900/60 rounded text-[10px] font-bold"
+                    className={`flex items-center gap-1 px-3 py-1 rounded text-[10px] font-bold border transition-colors ${
+                      isSepia
+                        ? "bg-[#faf4e6]/90 border-[#8c4f2b]/60 text-[#8c4f2b] hover:bg-[#ebd6bd]/50"
+                        : isLight
+                          ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100/50"
+                          : "bg-emerald-950/80 hover:bg-emerald-900 text-emerald-400 border border-emerald-900/60"
+                    }`}
                     title="Tambah baris tulisan di bagian bawah fasal ini"
                   >
                     <Plus size={11} />
@@ -2151,14 +2404,22 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Book Viewer (Kitab Yellowish Paper Aesthetic but adjusted to Dark Theme gracefully) */}
-              <div className="flex-1 overflow-y-auto p-6 md:p-10 space-y-8 bg-[#0a0a0a] scrollbar-thin scrollbar-thumb-zinc-800">
+              {/* Book Viewer (Kitab Yellowish Paper Aesthetic dynamically adjusted) */}
+              <div className={`flex-1 overflow-y-auto p-6 md:p-10 space-y-8 scrollbar-thin transition-colors duration-200 ${
+                isSepia
+                  ? "bg-[#faf4e6] scrollbar-thumb-[#ebd6bd]"
+                  : isLight
+                    ? "bg-zinc-50 scrollbar-thumb-zinc-350"
+                    : "bg-[#0a0a0a] scrollbar-thumb-zinc-800"
+              }`}>
                 {currentLinesList.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center h-48 border border-dashed border-zinc-800 rounded-lg p-6 text-center">
-                    <p className="text-sm text-zinc-500 mb-2">Fasal ini tidak mengandung baris teks.</p>
+                  <div className={`flex flex-col items-center justify-center h-48 border border-dashed rounded-lg p-6 text-center ${
+                    isSepia ? "border-[#ebd6bd] bg-[#f9f3e3]" : isLight ? "border-zinc-300 bg-white" : "border-zinc-800 bg-black/10"
+                  }`}>
+                    <p className={`text-sm mb-2 ${isSepia ? "text-[#8c4f2b]/80" : isLight ? "text-zinc-550" : "text-zinc-500"}`}>Fasal ini tidak mengandung baris teks.</p>
                     <button
                       onClick={handleAddEmptyLine}
-                      className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs rounded font-semibold transition"
+                      className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs rounded font-semibold transition shadow-md"
                     >
                       Mulai Tulis Baris Pertama
                     </button>
@@ -2171,15 +2432,29 @@ export default function App() {
                         key={line.id}
                         id={`viewport-line-${line.id}`}
                         onClick={() => setActiveLineId(line.id)}
-                        className={`group relative p-6 bg-[#111111]/90 rounded border transition-all cursor-pointer ${
+                        className={`group relative p-6 rounded border transition-all cursor-pointer duration-200 ${
                           isLineSelected
-                            ? "border-emerald-600 shadow-lg shadow-emerald-950/10 ring-1 ring-emerald-900/20"
-                            : "border-zinc-900 hover:border-zinc-850 hover:bg-[#121212]"
+                            ? isSepia
+                              ? "bg-white border-[#8c4f2b] shadow-md shadow-[#8c4f2b]/5 ring-1 ring-[#8c4f2b]/10"
+                              : isLight
+                                ? "bg-white border-emerald-600 shadow-sm"
+                                : "border-emerald-600 shadow-lg shadow-emerald-950/10 ring-1 ring-emerald-900/20 bg-[#111111]/90"
+                            : isSepia
+                              ? "bg-white/40 border-[#ebd6bd]/40 hover:border-[#ebd6bd]/80 hover:bg-white/80"
+                              : isLight
+                                ? "bg-white border-zinc-200 hover:border-zinc-300 hover:bg-white"
+                                : "border-zinc-900 bg-[#111111]/90 hover:border-zinc-850 hover:bg-[#121212]"
                         }`}
                       >
                         <div className="absolute top-1/2 -translate-y-1/2 -left-3 flex flex-col gap-1.5">
-                          <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${
-                            isLineSelected ? "bg-emerald-600 text-white" : "bg-zinc-900 text-zinc-500"
+                          <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold shadow-sm transition-all duration-200 ${
+                            isLineSelected
+                              ? "bg-emerald-600 text-white"
+                              : isSepia
+                                ? "bg-[#ebd6bd] text-[#5c3c26]"
+                                : isLight
+                                  ? "bg-zinc-200 text-zinc-650"
+                                  : "bg-zinc-900 text-zinc-500"
                           }`} title={`Urutan ke-${lIdx+1}`}>
                             {lIdx + 1}
                           </span>
@@ -2198,7 +2473,13 @@ export default function App() {
                               >
                                 {/* Arabic Display word */}
                                 <span
-                                  className="font-serif leading-none text-zinc-100 group-hover/word:text-emerald-400 select-all font-medium whitespace-nowrap"
+                                  className={`font-serif leading-none group-hover/word:text-emerald-500 transition-colors select-all font-medium whitespace-nowrap ${
+                                    isSepia
+                                      ? "text-[#3d2414]"
+                                      : isLight
+                                        ? "text-zinc-900"
+                                        : "text-zinc-100"
+                                  }`}
                                   style={{ fontSize: `${config.fontSizeArabic}px` }}
                                 >
                                   {w.arabic}
@@ -2207,11 +2488,23 @@ export default function App() {
                                 {/* Annotation lines */}
                                 <div className="flex flex-col items-center select-none" dir="ltr">
                                   {w.symbol && (
-                                    <span className="text-[10px] px-1 bg-zinc-900 text-emerald-400 font-mono rounded border border-zinc-800/60 font-semibold mb-0.5 leading-none py-0.5" title={`Kedudukan irab Nahwu: ${w.symbol}`}>
+                                    <span className={`text-[10px] px-1 font-mono rounded border font-semibold mb-0.5 leading-none py-0.5 ${
+                                      isSepia
+                                        ? "bg-[#faf4e6] text-[#8c4f2b] border-[#ebd6bd]/80"
+                                        : isLight
+                                          ? "bg-zinc-100 text-emerald-700 border-zinc-200"
+                                          : "bg-zinc-900 text-emerald-400 border-zinc-800/60"
+                                    }`} title={`Kedudukan irab Nahwu: ${w.symbol}`}>
                                       {w.symbol}
                                     </span>
                                   )}
-                                  <span className="text-[11px] text-[#8e8d8d] font-sans whitespace-nowrap text-center max-w-[130px] overflow-hidden text-ellipsis italic tracking-tight leading-3">
+                                  <span className={`text-[11px] font-sans whitespace-nowrap text-center max-w-[130px] overflow-hidden text-ellipsis italic tracking-tight leading-3 ${
+                                    isSepia
+                                      ? "text-[#5c3c26]"
+                                      : isLight
+                                        ? "text-zinc-650"
+                                        : "text-[#8e8d8d]"
+                                  }`}>
                                     {w.makna || ""}
                                   </span>
                                 </div>
@@ -2221,7 +2514,9 @@ export default function App() {
                         ) : (
                           // Full continuous Arabic rendering without separation
                           <p
-                            className="text-right text-zinc-100 font-serif leading-loose font-medium select-all"
+                            className={`text-right font-serif leading-loose font-medium select-all ${
+                              isSepia ? "text-[#3d2414]" : isLight ? "text-zinc-900" : "text-zinc-100"
+                            }`}
                             dir="rtl"
                             style={{ fontSize: `${config.fontSizeArabic}px` }}
                           >
@@ -2231,34 +2526,50 @@ export default function App() {
 
                         {/* Separator line when selected */}
                         {isLineSelected && (
-                          <div className="h-px bg-zinc-850 my-3"></div>
+                          <div className={`h-px my-3 ${isSepia ? "bg-[#ebd6bd]" : isLight ? "bg-zinc-200" : "bg-zinc-850"}`}></div>
                         )}
 
                         {/* Ind Indonesia or translation annotations */}
                         {config.showFullTranslation && (
-                          <div className="text-zinc-400 mt-2.5 flex items-start gap-2" dir="ltr">
-                            <span className="text-[10px] uppercase font-semibold text-emerald-600 bg-emerald-950/40 border border-emerald-900/40 px-1.5 py-0.2 rounded mt-0.5">
+                          <div className="mt-2.5 flex items-start gap-2" dir="ltr">
+                            <span className={`text-[10px] uppercase font-semibold px-1.5 py-0.2 rounded mt-0.5 ${
+                              isSepia
+                                ? "text-[#8c4f2b] bg-[#ebd6bd]/40 border border-[#ebd6bd]/60"
+                                : isLight
+                                  ? "text-emerald-700 bg-emerald-50 border border-emerald-150"
+                                  : "text-emerald-600 bg-emerald-950/40 border border-emerald-900/40"
+                            }`}>
                               ID
                             </span>
                             <p
                               style={{ fontSize: `${config.fontSizeTranslation}px` }}
-                              className="font-sans leading-relaxed text-zinc-300"
+                              className={`font-sans leading-relaxed ${
+                                isSepia ? "text-[#3d2414]" : isLight ? "text-zinc-800" : "text-zinc-300"
+                              }`}
                             >
-                              {line.translationFull || <span className="text-zinc-600 italic">Belum ada terjemahan penuh...</span>}
+                              {line.translationFull || <span className="text-zinc-500 italic">Belum ada terjemahan penuh...</span>}
                             </p>
                           </div>
                         )}
 
                         {/* Scholastic structure layers (Matan, Syarah, Hasyiyah, Ta'liq) */}
                         {config.showNotes && (
-                          <div className="mt-2 space-y-2 border-t border-zinc-900 pt-2 flex flex-col gap-1.5" dir="ltr">
+                          <div className={`mt-2 space-y-2 border-t pt-2 flex flex-col gap-1.5 ${
+                            isSepia ? "border-[#ebd6bd]" : isLight ? "border-zinc-200" : "border-zinc-900"
+                          }`} dir="ltr">
                             {/* 1. Matan */}
                             {((config.showMatan !== false) && line.matan) && (
                               <div className="text-xs flex items-start gap-2">
-                                <span className="text-[9px] tracking-wider font-extrabold text-amber-500 bg-amber-950/40 border border-amber-900/40 px-1.5 py-0.5 rounded leading-none mt-0.5">
+                                <span className={`text-[9px] tracking-wider font-extrabold px-1.5 py-0.5 rounded leading-none mt-0.5 ${
+                                  isSepia
+                                    ? "text-[#8c4f2b] bg-amber-50 border border-amber-200"
+                                    : "text-amber-500 bg-amber-950/40 border border-amber-900/40"
+                                }`}>
                                   MATAN
                                 </span>
-                                <p className="font-sans leading-relaxed text-amber-200/90 font-medium">
+                                <p className={`font-sans leading-relaxed font-medium ${
+                                  isSepia ? "text-amber-900" : "text-amber-200/90"
+                                }`}>
                                   {line.matan}
                                 </p>
                               </div>
@@ -2267,10 +2578,16 @@ export default function App() {
                             {/* 2. Syarah (fallback to notes if syarah is not populated yet) */}
                             {((config.showSyarah !== false) && (line.syarah || line.notes)) && (
                               <div className="text-xs flex items-start gap-2">
-                                <span className="text-[10px] tracking-wider font-extrabold text-emerald-500 bg-emerald-950/40 border border-emerald-900/40 px-1.5 py-0.5 rounded leading-none mt-0.5">
+                                <span className={`text-[10px] tracking-wider font-extrabold px-1.5 py-0.5 rounded leading-none mt-0.5 ${
+                                  isSepia
+                                    ? "text-emerald-800 bg-emerald-50 border border-emerald-2001"
+                                    : "text-emerald-500 bg-emerald-950/40 border border-emerald-900/40"
+                                }`}>
                                   SYARAH
                                 </span>
-                                <p className="font-sans leading-relaxed text-zinc-350">
+                                <p className={`font-sans leading-relaxed ${
+                                  isSepia ? "text-[#3d2414]" : isLight ? "text-zinc-850" : "text-zinc-350"
+                                }`}>
                                   {line.syarah || line.notes}
                                 </p>
                               </div>
@@ -2278,11 +2595,23 @@ export default function App() {
 
                             {/* 3. Hasyiyah */}
                             {((config.showHasyiyah !== false) && line.hasyiyah) && (
-                              <div className="text-xs flex items-start gap-2 pl-2 border-l border-indigo-900/60 bg-indigo-950/10 py-1 rounded">
-                                <span className="text-[9px] tracking-wider font-extrabold text-indigo-400 bg-indigo-950/50 border border-indigo-900/40 px-1.5 py-0.5 rounded leading-none mt-0.5">
+                              <div className={`text-xs flex items-start gap-2 pl-2 rounded ${
+                                isSepia
+                                  ? "border-l border-[#8c4f2b]/45 bg-[#ebd6bd]/20"
+                                  : isLight
+                                    ? "border-l border-indigo-200 bg-indigo-50/50"
+                                    : "border-l border-indigo-900/60 bg-indigo-950/10 py-1"
+                              }`}>
+                                <span className={`text-[9px] tracking-wider font-extrabold px-1.5 py-0.5 rounded leading-none mt-0.5 ${
+                                  isSepia
+                                    ? "text-indigo-800 bg-indigo-50 border border-indigo-200"
+                                    : "text-indigo-400 bg-indigo-950/50 border border-indigo-900/40"
+                                }`}>
                                   HASYIYAH
                                 </span>
-                                <p className="font-sans italic leading-relaxed text-zinc-400">
+                                <p className={`font-sans italic leading-relaxed ${
+                                  isSepia ? "text-[#5c3c26]" : isLight ? "text-zinc-650" : "text-zinc-400"
+                                }`}>
                                   {line.hasyiyah}
                                 </p>
                               </div>
@@ -2290,11 +2619,23 @@ export default function App() {
 
                             {/* 4. Ta'liq */}
                             {((config.showTaliq !== false) && line.taliq) && (
-                              <div className="text-[11px] flex items-start gap-2 bg-rose-950/5 py-1 px-1 rounded border border-rose-950/10">
-                                <span className="text-[8px] tracking-wider font-extrabold text-rose-400 bg-rose-950/30 border border-rose-900/30 px-1.5 py-0.5 rounded leading-none mt-0.5">
+                              <div className={`text-[11px] flex items-start gap-2 py-1 px-1 rounded border ${
+                                isSepia
+                                  ? "bg-[#faf4e6] border-[#ebd6bd]"
+                                  : isLight
+                                    ? "bg-zinc-150/40 border-zinc-200"
+                                    : "bg-rose-950/5 border-rose-950/10"
+                              }`}>
+                                <span className={`text-[8px] tracking-wider font-extrabold px-1.5 py-0.5 rounded leading-none mt-0.5 ${
+                                  isSepia
+                                    ? "text-rose-800 bg-rose-50 border border-rose-200"
+                                    : "text-rose-400 bg-rose-950/30 border border-rose-900/30"
+                                }`}>
                                   TA'LIQ
                                 </span>
-                                <p className="font-sans leading-relaxed text-zinc-500 italic">
+                                <p className={`font-sans leading-relaxed italic ${
+                                  isSepia ? "text-[#5c3c26]/80" : isLight ? "text-zinc-550" : "text-zinc-500"
+                                }`}>
                                   {line.taliq}
                                 </p>
                               </div>
@@ -2305,7 +2646,13 @@ export default function App() {
                         <div className="absolute top-2.5 right-2.5 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
                           <button
                             onClick={(e) => handleDeleteLine(line.id, e)}
-                            className="p-1 px-1.5 rounded bg-zinc-900 text-zinc-650 hover:text-red-400 border border-zinc-800 transition"
+                            className={`p-1 px-1.5 rounded transition border ${
+                              isSepia
+                                ? "bg-[#faf4e6] text-[#8c4f2b] border-[#ebd6bd] hover:bg-rose-100 hover:text-red-600 hover:border-rose-200"
+                                : isLight
+                                  ? "bg-zinc-100 text-zinc-500 border-zinc-200 hover:bg-rose-50 hover:text-red-600 hover:border-rose-200"
+                                  : "bg-zinc-900 text-zinc-650 hover:text-red-400 border border-zinc-800"
+                            }`}
                             title="Hapus baris"
                           >
                             <Trash2 size={12} />
@@ -3285,6 +3632,51 @@ export default function App() {
                           <p className="text-[8px] text-amber-400/80 mt-0.5 leading-snug">Menerapkan kertas krem kekuningan antik, bingkai border Arab, dan multi-komentar pesantren.</p>
                         </div>
                       </label>
+                    </div>
+
+                    {/* Kitab Kuning Margin Layout selection */}
+                    <div className="border-t border-zinc-900 pt-3 mt-3">
+                      <span className="text-[9.5px] uppercase font-bold tracking-widest text-[#abafb5] block mb-2">Formatur Tata Letak Hamis (Margin)</span>
+                      <div className="grid grid-cols-3 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setExportMarginLayout("standard")}
+                          className={`py-2 px-1 rounded-md border text-center transition-all cursor-pointer ${
+                            exportMarginLayout === "standard"
+                              ? "bg-amber-950/15 border-amber-600/70 text-amber-300 font-bold text-[9.5px]"
+                              : "bg-zinc-900 border-zinc-850 text-zinc-400 hover:border-zinc-700 text-[9.5px]"
+                          }`}
+                        >
+                          <p>Tumpuk</p>
+                          <span className="text-[7.5px] text-zinc-500 font-normal block mt-0.5">Mendatar</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setExportMarginLayout("left")}
+                          className={`py-2 px-1 rounded-md border text-center transition-all cursor-pointer ${
+                            exportMarginLayout === "left"
+                              ? "bg-amber-950/15 border-amber-600/70 text-amber-300 font-bold text-[9.5px]"
+                              : "bg-zinc-900 border-zinc-850 text-zinc-400 hover:border-zinc-700 text-[9.5px]"
+                          }`}
+                        >
+                          <p>Hamis Kiri</p>
+                          <span className="text-[7.5px] text-zinc-500 font-normal block mt-0.5">1 Sisi Pinggir</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setExportMarginLayout("both")}
+                          className={`py-2 px-1 rounded-md border text-center transition-all cursor-pointer ${
+                            exportMarginLayout === "both"
+                              ? "bg-amber-950/15 border-amber-600/70 text-amber-300 font-bold text-[9.5px]"
+                              : "bg-zinc-900 border-zinc-850 text-zinc-400 hover:border-zinc-700 text-[9.5px]"
+                          }`}
+                        >
+                          <p>Dua Sisi</p>
+                          <span className="text-[7.5px] text-zinc-500 font-normal block mt-0.5">Kiri & Kanan</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>

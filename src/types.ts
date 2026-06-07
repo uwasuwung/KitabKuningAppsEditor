@@ -59,7 +59,7 @@ export interface TransliterationRule {
 }
 
 export interface UserConfig {
-  theme: "light" | "dark";
+  theme: "light" | "dark" | "sepia";
   showWordMakna: boolean;
   showFullTranslation: boolean;
   showNotes: boolean; // default legacy general notes toggle

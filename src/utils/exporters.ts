@@ -31,6 +31,7 @@ export interface ExportOptions {
   showHasyiyah?: boolean;
   showTaliq?: boolean;
   styleKitabKuning?: boolean;
+  marginLayout?: "standard" | "left" | "both";
 }
 
 /**
@@ -203,6 +204,87 @@ export function exportToPdf(project: KitabProject, options: ExportOptions): void
           padding: 20px;
           background-color: #f9fafb;
           break-inside: avoid;
+        }
+
+        /* Marginal Layout CSS styles */
+        .margin-container-row {
+          display: flex;
+          gap: 16px;
+          align-items: stretch;
+          direction: rtl; /* Flow lines Right to Left */
+          margin-bottom: 30px;
+          break-inside: avoid;
+          width: 100%;
+        }
+
+        .center-text-frame {
+          flex: 2.2;
+          min-width: 0;
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
+          padding: 24px;
+          border: 1px solid #e5e7eb;
+          border-radius: 8px;
+          background-color: #fafafa;
+        }
+
+        .kitab-kuning-theme .center-text-frame {
+          background-color: #fdfaf3 !important;
+          border: 4px double #c49662 !important; /* Authentic double borders just like the vintage plates in the picture! */
+          border-radius: 4px;
+          padding: 24px;
+        }
+
+        .side-commentary-margin {
+          flex: 0.9;
+          min-width: 130px;
+          max-width: 250px;
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+          padding: 14px;
+          background-color: #ffffff;
+          border-radius: 6px;
+          border: 1px dashed #d1d5db;
+          justify-content: flex-start;
+          font-size: 11px;
+        }
+
+        .kitab-kuning-theme .side-commentary-margin {
+          background-color: #fbf8f0 !important;
+          border: 1px solid #eedec4 !important;
+          border-radius: 4px;
+        }
+
+        .margin-left-border {
+          border-left: 3px solid #6b21a8;
+        }
+        .kitab-kuning-theme .margin-left-border {
+          border-left: 3px solid #ad8053 !important;
+        }
+
+        .margin-right-border {
+          border-right: 3px solid #b45309;
+        }
+        .kitab-kuning-theme .margin-right-border {
+          border-right: 3px solid #ad8053 !important;
+        }
+
+        .empty-margin {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          opacity: 0.5;
+          text-align: center;
+          border-style: dotted !important;
+        }
+        .decorative-leaf {
+          font-size: 14px;
+          color: #c49662;
+          opacity: 0.7;
+          margin-bottom: 4px;
         }
 
         /* Arabic phrase with sublinear jenggot annotations */
@@ -543,58 +625,137 @@ export function exportToPdf(project: KitabProject, options: ExportOptions): void
                 <h3 class="section-title">${sec.title}</h3>
                 ${sec.lines.map(line => {
                   const hasWords = line.words && line.words.length > 0;
-                  return `
-                    <div class="line-card">
-                      <div class="arabic-row">
-                        ${hasWords && options.showMakna
-                          ? line.words.map(w => `
-                              <div class="word-cell">
-                                <span class="arabic-text">${w.arabic}</span>
-                                ${options.showSymbols && w.symbol ? `<span class="symbol-tag">${w.symbol}</span>` : ""}
-                                <span class="jenggot-text">${w.makna || ""}</span>
-                              </div>
-                            `).join("")
-                          : `<div class="word-cell" style="width: 100%; text-align: right;">
-                              <span class="arabic-text" style="font-size: 28px;">${line.arabicFull}</span>
-                             </div>`
-                        }
-                      </div>
+                  const marginLayout = options.marginLayout || "both"; // default to bilateral/both margins to fit beautifully!
 
-                      ${options.showTranslation && line.translationFull ? `
-                        <div class="translation-block">
-                          <strong>Terjemah:</strong> ${line.translationFull}
-                        </div>
-                      ` : ""}
-
-                      ${showMatan && line.matan ? `
-                        <div class="layer-matan">
-                          <span class="layer-badge matan-badge">MATAN</span>
-                          <span class="arabic-text-serif" dir="rtl">${line.matan}</span>
-                        </div>
-                      ` : ""}
-
-                      ${showSyarah && (line.syarah || line.notes) ? `
-                        <div class="layer-syarah">
-                          <span class="layer-badge syarah-badge">SYARAH</span>
-                          <p class="commentary-text">${line.syarah || line.notes}</p>
-                        </div>
-                      ` : ""}
-
-                      ${showHasyiyah && line.hasyiyah ? `
-                        <div class="layer-hasyiyah">
-                          <span class="layer-badge hasyiyah-badge">HASYIYAH</span>
-                          <p class="commentary-text">${line.hasyiyah}</p>
-                        </div>
-                      ` : ""}
-
-                      ${showTaliq && line.taliq ? `
-                        <div class="layer-taliq">
-                          <span class="layer-badge taliq-badge">TA'LIQ</span>
-                          <p class="commentary-text">${line.taliq}</p>
-                        </div>
-                      ` : ""}
+                  const arabicRowHtml = `
+                    <div class="arabic-row">
+                      ${hasWords && options.showMakna
+                        ? line.words.map(w => `
+                            <div class="word-cell">
+                              <span class="arabic-text">${w.arabic}</span>
+                              ${options.showSymbols && w.symbol ? `<span class="symbol-tag">${w.symbol}</span>` : ""}
+                              <span class="jenggot-text">${w.makna || ""}</span>
+                            </div>
+                          `).join("")
+                        : `<div class="word-cell" style="width: 100%; text-align: right;">
+                            <span class="arabic-text" style="font-size: 28px;">${line.arabicFull}</span>
+                           </div>`
+                      }
                     </div>
                   `;
+
+                  const translationHtml = options.showTranslation && line.translationFull ? `
+                    <div class="translation-block">
+                      <strong>Terjemah:</strong> ${line.translationFull}
+                    </div>
+                  ` : "";
+
+                  const matanHtml = showMatan && line.matan ? `
+                    <div class="layer-matan">
+                      <span class="layer-badge matan-badge">MATAN</span>
+                      <span class="arabic-text-serif" dir="rtl">${line.matan}</span>
+                    </div>
+                  ` : "";
+
+                  const syarahHtml = showSyarah && (line.syarah || line.notes) ? `
+                    <div class="layer-syarah">
+                      <span class="layer-badge syarah-badge">SYARAH</span>
+                      <p class="commentary-text">${line.syarah || line.notes}</p>
+                    </div>
+                  ` : "";
+
+                  const hasyiyahHtml = showHasyiyah && line.hasyiyah ? `
+                    <div class="layer-hasyiyah">
+                      <span class="layer-badge hasyiyah-badge">HASYIYAH</span>
+                      <p class="commentary-text">${line.hasyiyah}</p>
+                    </div>
+                  ` : "";
+
+                  const taliqHtml = showTaliq && line.taliq ? `
+                    <div class="layer-taliq">
+                      <span class="layer-badge taliq-badge">TA'LIQ</span>
+                      <p class="commentary-text">${line.taliq}</p>
+                    </div>
+                  ` : "";
+
+                  if (marginLayout === "standard") {
+                    return `
+                      <div class="line-card">
+                        ${arabicRowHtml}
+                        ${translationHtml}
+                        ${matanHtml}
+                        ${syarahHtml}
+                        ${hasyiyahHtml}
+                        ${taliqHtml}
+                      </div>
+                    `;
+                  } else if (marginLayout === "left") {
+                    const hasLeftCommentary = syarahHtml || hasyiyahHtml || taliqHtml;
+                    return `
+                      <div class="margin-container-row">
+                        <!-- Main Content Center Block -->
+                        <div class="center-text-frame">
+                          ${arabicRowHtml}
+                          ${matanHtml}
+                          ${translationHtml}
+                        </div>
+                        
+                        <!-- Left Marginal Commentary Block -->
+                        ${hasLeftCommentary ? `
+                          <div class="side-commentary-margin margin-left-border">
+                            ${syarahHtml}
+                            ${hasyiyahHtml}
+                            ${taliqHtml}
+                          </div>
+                        ` : `
+                          <div class="side-commentary-margin margin-left-border empty-margin">
+                            <span class="decorative-leaf">✿</span>
+                            <span style="font-size: 9px; color: #a47c5c; opacity: 0.6; font-family: monospace;">HASYIYAH</span>
+                          </div>
+                        `}
+                      </div>
+                    `;
+                  } else {
+                    // Both (Dua Sisi)
+                    const hasLeftCommentary = syarahHtml || hasyiyahHtml;
+                    const hasRightCommentary = taliqHtml;
+                    
+                    return `
+                      <div class="margin-container-row">
+                        <!-- Right Marginal Block -->
+                        ${hasRightCommentary ? `
+                          <div class="side-commentary-margin margin-right-border">
+                            ${taliqHtml}
+                          </div>
+                        ` : `
+                          <div class="side-commentary-margin margin-right-border empty-margin">
+                            <span class="decorative-leaf">✿</span>
+                            <span style="font-size: 8px; color: #a47c5c; opacity: 0.6; font-family: monospace;">TA'LIQ</span>
+                          </div>
+                        `}
+
+                        <!-- Main Content Center Block -->
+                        <div class="center-text-frame">
+                          ${arabicRowHtml}
+                          ${matanHtml}
+                          ${translationHtml}
+                        </div>
+
+                        <!-- Left Marginal Block -->
+                        ${hasLeftCommentary ? `
+                          <div class="side-commentary-margin margin-left-border">
+                            ${syarahHtml}
+                            ${hasyiyahHtml}
+                          </div>
+                        ` : `
+                          <div class="side-commentary-margin margin-left-border empty-margin">
+                            <span class="decorative-leaf">✿</span>
+                            <span style="font-size: 8px; color: #a47c5c; opacity: 0.6; font-family: monospace;">HASYIYAH</span>
+                          </div>
+                        `}
+                      </div>
+                    `;
+                  }
                 }).join("")}
               </div>
             `).join("")}
