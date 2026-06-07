@@ -17,6 +17,7 @@ export const sampleKitabProject: KitabProject = {
       id: "ch-1",
       title: "BAB AL-KALAM (بَابُ الْكَلَامِ)",
       order: 1,
+      category: "Nahwu",
       sections: [
         {
           id: "sec-1",

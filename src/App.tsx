@@ -33,7 +33,12 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   PanelRightClose,
-  PanelRightOpen
+  PanelRightOpen,
+  Camera,
+  RotateCw,
+  Upload,
+  Image,
+  FileText
 } from "lucide-react";
 
 import { motion, AnimatePresence } from "motion/react";
@@ -128,12 +133,35 @@ export default function App() {
   // --- Search state ---
   const [kamusSearch, setKamusSearch] = useState<string>("");
   const [kitabSearch, setKitabSearch] = useState<string>("");
+  const [kitabSearchCategory, setKitabSearchCategory] = useState<string>("Semua");
+  const [kitabSearchStartChapterId, setKitabSearchStartChapterId] = useState<string>("all");
+  const [kitabSearchEndChapterId, setKitabSearchEndChapterId] = useState<string>("all");
 
   // --- Sidebar & Panel Toggle ---
   const [showLeftSidebar, setShowLeftSidebar] = useState<boolean>(true);
   const [showRightSidebar, setShowRightSidebar] = useState<boolean>(true);
   const [showPreferences, setShowPreferences] = useState<boolean>(false);
   const [splitViewMode, setSplitViewMode] = useState<boolean>(false);
+
+  // --- Camera & Visual Reference States ---
+  const [rightSidebarTab, setRightSidebarTab] = useState<"kamus" | "kamera">("kamus");
+  const [capturedRefImage, setCapturedRefImage] = useState<string | null>(() => {
+    return localStorage.getItem("kitab_visual_reference") || null;
+  });
+  const [isCameraActive, setIsCameraActive] = useState<boolean>(false);
+  const [cameraBrightness, setCameraBrightness] = useState<number>(100);
+  const [cameraContrast, setCameraContrast] = useState<number>(100);
+  const [cameraRotate, setCameraRotate] = useState<number>(0);
+  const [cameraZoom, setCameraZoom] = useState<number>(1);
+  const [cameraPanX, setCameraPanX] = useState<number>(0);
+  const [cameraPanY, setCameraPanY] = useState<number>(0);
+
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const visualRefLoaderRef = useRef<HTMLInputElement | null>(null);
+
+  const [isPanning, setIsPanning] = useState<boolean>(false);
+  const [panStart, setPanStart] = useState({ x: 0, y: 0 });
 
   // --- Transliteration helper state ---
   const [isTransliterating, setIsTransliterating] = useState<boolean>(false);
@@ -163,6 +191,8 @@ export default function App() {
   const [exportMobileTab, setExportMobileTab] = useState<"options" | "preview">("options");
 
   const [newChapterTitle, setNewChapterTitle] = useState<string>("");
+  const [newChapterCategory, setNewChapterCategory] = useState<string>("Umum");
+  const [sidebarCategoryFilter, setSidebarCategoryFilter] = useState<string>("Semua");
   const [newSectionTitle, setNewSectionTitle] = useState<string>("");
 
   // --- Line Form state ---
@@ -202,6 +232,18 @@ export default function App() {
   const wordArabicRef = useRef<HTMLInputElement | null>(null);
   const fileLoaderRef = useRef<HTMLInputElement | null>(null);
   const kamusLoaderRef = useRef<HTMLInputElement | null>(null);
+  const pdfLoaderRef = useRef<HTMLInputElement | null>(null);
+
+  // --- Auto-Baca PDF States ---
+  const [showPdfModal, setShowPdfModal] = useState<boolean>(false);
+  const [pdfLoading, setPdfLoading] = useState<boolean>(false);
+  const [pdfParsingStatus, setPdfParsingStatus] = useState<string>("");
+  const [pdfParsedRows, setPdfParsedRows] = useState<{ id: string; arabic: string; translation: string; isSelected: boolean }[]>([]);
+  const [pdfPairingMode, setPdfPairingMode] = useState<"smart" | "separate">("smart");
+  const [pdfTargetChapterId, setPdfTargetChapterId] = useState<string>("new");
+  const [pdfNewChapterTitle, setPdfNewChapterTitle] = useState<string>("Bab Hasil Impor PDF");
+  const [pdfNewChapterCategory, setPdfNewChapterCategory] = useState<string>("Umum");
+  const [pdfRawTextLines, setPdfRawTextLines] = useState<string[]>([]);
 
   // --- Bootstrap default navigation on mount ---
   useEffect(() => {
@@ -227,6 +269,130 @@ export default function App() {
     }, 300000); // 5 minutes
     return () => clearInterval(backupInterval);
   }, [project, dictionary]);
+
+  // --- Camera & Visual Reference Effects & Handlers ---
+  useEffect(() => {
+    if (isCameraActive) {
+      navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+        .then(stream => {
+          if (videoRef.current) {
+            videoRef.current.srcObject = stream;
+          }
+          streamRef.current = stream;
+        })
+        .catch(err => {
+          console.error("Gagal mengakses kamera:", err);
+          showNotif("Gagal mengakses kamera. Pastikan izin kamera diberikan.", "error");
+          setIsCameraActive(false);
+        });
+    } else {
+      stopCameraStream();
+    }
+    return () => {
+      stopCameraStream();
+    };
+  }, [isCameraActive]);
+
+  function stopCameraStream() {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+  }
+
+  function handleCapturePhoto() {
+    if (!videoRef.current) return;
+    const video = videoRef.current;
+    try {
+      const canvas = document.createElement("canvas");
+      canvas.width = video.videoWidth || 640;
+      canvas.height = video.videoHeight || 480;
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const dataUrl = canvas.toDataURL("image/jpeg");
+        setCapturedRefImage(dataUrl);
+        localStorage.setItem("kitab_visual_reference", dataUrl);
+        setIsCameraActive(false);
+        showNotif("Foto naskah berhasil diambil!", "success");
+      }
+    } catch (e) {
+      console.error(e);
+      showNotif("Gagal mengambil foto dari kamera.", "error");
+    }
+  }
+
+  function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const dataUrl = event.target?.result as string;
+      setCapturedRefImage(dataUrl);
+      localStorage.setItem("kitab_visual_reference", dataUrl);
+      showNotif("Gambar referensi berhasil diunggah!", "success");
+    };
+    reader.onerror = () => {
+      showNotif("Gagal membaca file gambar.", "error");
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function handleDeleteRefImage() {
+    if (confirm("Hapus visual referensi kitab dari panel?")) {
+      setCapturedRefImage(null);
+      localStorage.removeItem("kitab_visual_reference");
+      setIsCameraActive(false);
+      stopCameraStream();
+      // Reset view options
+      setCameraBrightness(100);
+      setCameraContrast(100);
+      setCameraRotate(0);
+      setCameraZoom(1);
+      setCameraPanX(0);
+      setCameraPanY(0);
+      showNotif("Referensi visual berhasil dihapus.", "success");
+    }
+  }
+
+  function resetViewport() {
+    setCameraZoom(1);
+    setCameraPanX(0);
+    setCameraPanY(0);
+    setCameraRotate(0);
+    showNotif("Tampilan referensi di-reset ke default.", "info");
+  }
+
+  const handleRefMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsPanning(true);
+    setPanStart({ x: e.clientX - cameraPanX, y: e.clientY - cameraPanY });
+  };
+
+  const handleRefMouseMove = (e: React.MouseEvent) => {
+    if (!isPanning) return;
+    setCameraPanX(e.clientX - panStart.x);
+    setCameraPanY(e.clientY - panStart.y);
+  };
+
+  const handleRefMouseUpOrLeave = () => {
+    setIsPanning(false);
+  };
+
+  const handleRefTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 1) {
+      setIsPanning(true);
+      const touch = e.touches[0];
+      setPanStart({ x: touch.clientX - cameraPanX, y: touch.clientY - cameraPanY });
+    }
+  };
+
+  const handleRefTouchMove = (e: React.TouchEvent) => {
+    if (!isPanning || e.touches.length !== 1) return;
+    const touch = e.touches[0];
+    setCameraPanX(touch.clientX - panStart.x);
+    setCameraPanY(touch.clientY - panStart.y);
+  };
 
   // --- Save Project & Dictionary to Local Storage ---
   function saveToLocalStorage(isAutoBackup = false) {
@@ -464,6 +630,7 @@ export default function App() {
       id: newId,
       title: newChapterTitle.toUpperCase(),
       order: project.chapters.length + 1,
+      category: newChapterCategory,
       sections: []
     };
     setProject(prev => ({
@@ -471,6 +638,7 @@ export default function App() {
       chapters: [...prev.chapters, newCh]
     }));
     setNewChapterTitle("");
+    setNewChapterCategory("Umum");
     setActiveChapterId(newId);
     setActiveSectionId("");
     setActiveLineId("");
@@ -829,6 +997,323 @@ export default function App() {
       }
     };
     reader.readAsText(file);
+  }
+
+  // --- Auto-Baca PDF parsing & pairing algorithm ---
+  async function handleImportPdfFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    const file = files[0];
+    
+    setPdfLoading(true);
+    setPdfParsingStatus("Memuat pustaka pembaca PDF...");
+    
+    try {
+      let pdfjsLib: any = (window as any).pdfjsLib;
+      if (!pdfjsLib) {
+        await new Promise<void>((resolve, reject) => {
+          const script = document.createElement("script");
+          script.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js";
+          script.onload = () => {
+            const lib = (window as any).pdfjsLib;
+            lib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js";
+            resolve();
+          };
+          script.onerror = () => reject(new Error("Gagal mengunduh modul PDF.js online. Periksa koneksi internet Anda."));
+          document.head.appendChild(script);
+        });
+        pdfjsLib = (window as any).pdfjsLib;
+      }
+      
+      setPdfParsingStatus("Membaca berkas PDF...");
+      const fileReader = new FileReader();
+      
+      fileReader.onload = async (event) => {
+        try {
+          const typedarray = new Uint8Array(event.target?.result as ArrayBuffer);
+          const pdf = await pdfjsLib.getDocument({ data: typedarray }).promise;
+          
+          let compiledLines: string[] = [];
+          
+          for (let i = 1; i <= pdf.numPages; i++) {
+            setPdfParsingStatus(`Memindai Teks Halaman ${i} dari ${pdf.numPages}...`);
+            const page = await pdf.getPage(i);
+            const textContent = await page.getTextContent();
+            
+            const items = textContent.items as any[];
+            if (!items || items.length === 0) continue;
+            
+            items.sort((a, b) => {
+              const yDiff = b.transform[5] - a.transform[5];
+              if (Math.abs(yDiff) > 5) return yDiff;
+              return a.transform[4] - b.transform[4];
+            });
+            
+            let linesInPage: string[] = [];
+            let currentLine = "";
+            let lastY = -1;
+            
+            for (const item of items) {
+              if (lastY === -1) {
+                currentLine = item.str;
+                lastY = item.transform[5];
+              } else if (Math.abs(item.transform[5] - lastY) > 8) {
+                if (currentLine.trim()) {
+                  linesInPage.push(currentLine.trim());
+                }
+                currentLine = item.str;
+                lastY = item.transform[5];
+              } else {
+                currentLine += " " + item.str;
+              }
+            }
+            if (currentLine.trim()) {
+              linesInPage.push(currentLine.trim());
+            }
+            
+            compiledLines = [...compiledLines, ...linesInPage];
+          }
+          
+          if (compiledLines.length === 0) {
+            throw new Error("Teks PDF kosong atau berupa pindaian gambar (OCR diperlukan).");
+          }
+          
+          setPdfRawTextLines(compiledLines);
+          
+          const pairedRows: { id: string; arabic: string; translation: string; isSelected: boolean }[] = [];
+          let currentArabic = "";
+          let currentTranslation = "";
+
+          for (const line of compiledLines) {
+            const isAr = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(line);
+            if (isAr) {
+              if (currentArabic.trim()) {
+                pairedRows.push({
+                  id: "pdf-pair-" + Math.random().toString(36).substr(2, 9),
+                  arabic: currentArabic.trim(),
+                  translation: currentTranslation.trim(),
+                  isSelected: true
+                });
+                currentArabic = "";
+                currentTranslation = "";
+              }
+              currentArabic = line;
+            } else {
+              if (currentArabic.trim()) {
+                currentTranslation += (currentTranslation ? " " : "") + line;
+              } else {
+                pairedRows.push({
+                  id: "pdf-pair-" + Math.random().toString(36).substr(2, 9),
+                  arabic: "",
+                  translation: line,
+                  isSelected: true
+                });
+              }
+            }
+          }
+          if (currentArabic.trim() || currentTranslation.trim()) {
+            pairedRows.push({
+              id: "pdf-pair-" + Math.random().toString(36).substr(2, 9),
+              arabic: currentArabic.trim(),
+              translation: currentTranslation.trim(),
+              isSelected: true
+            });
+          }
+          
+          setPdfParsedRows(pairedRows);
+          setPdfTargetChapterId("new");
+          setPdfNewChapterTitle(`Kitab Impor - ${(file.name || "Untitled").replace(/\.pdf$/i, "")}`);
+          setShowPdfModal(true);
+          showNotif("Sukses membaca PDF! Silakan periksa hasil tinjau.", "success");
+          
+        } catch (err: any) {
+          showNotif(`Gagal memuat isi PDF: ${err.message}`, "error");
+        } finally {
+          setPdfLoading(false);
+          setPdfParsingStatus("");
+        }
+      };
+      
+      fileReader.onerror = () => {
+        showNotif("Gagal membaca berkas lokal PDF.", "error");
+        setPdfLoading(false);
+        setPdfParsingStatus("");
+      };
+      
+      fileReader.readAsArrayBuffer(file);
+      
+    } catch (err: any) {
+      showNotif(err.message, "error");
+      setPdfLoading(false);
+      setPdfParsingStatus("");
+    }
+  }
+
+  function handleRecalculatePdfRows(mode: "smart" | "separate") {
+    setPdfPairingMode(mode);
+    if (pdfRawTextLines.length === 0) return;
+    
+    if (mode === "smart") {
+      const pairedRows: { id: string; arabic: string; translation: string; isSelected: boolean }[] = [];
+      let currentArabic = "";
+      let currentTranslation = "";
+
+      for (const line of pdfRawTextLines) {
+        const isAr = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(line);
+        if (isAr) {
+          if (currentArabic.trim()) {
+            pairedRows.push({
+              id: "pdf-pair-" + Math.random().toString(36).substr(2, 9),
+              arabic: currentArabic.trim(),
+              translation: currentTranslation.trim(),
+              isSelected: true
+            });
+            currentArabic = "";
+            currentTranslation = "";
+          }
+          currentArabic = line;
+        } else {
+          if (currentArabic.trim()) {
+            currentTranslation += (currentTranslation ? " " : "") + line;
+          } else {
+            pairedRows.push({
+              id: "pdf-pair-" + Math.random().toString(36).substr(2, 9),
+              arabic: "",
+              translation: line,
+              isSelected: true
+            });
+          }
+        }
+      }
+      if (currentArabic.trim() || currentTranslation.trim()) {
+        pairedRows.push({
+          id: "pdf-pair-" + Math.random().toString(36).substr(2, 9),
+          arabic: currentArabic.trim(),
+          translation: currentTranslation.trim(),
+          isSelected: true
+        });
+      }
+      setPdfParsedRows(pairedRows);
+    } else {
+      const separateRows = pdfRawTextLines.map(line => {
+        const isAr = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(line);
+        return {
+          id: "pdf-sep-" + Math.random().toString(36).substr(2, 9),
+          arabic: isAr ? line : "",
+          translation: isAr ? "" : line,
+          isSelected: true
+        };
+      });
+      setPdfParsedRows(separateRows);
+    }
+  }
+
+  function handleApplyPdfImport() {
+    const selectedRows = pdfParsedRows.filter(row => row.isSelected && (row.arabic.trim() || row.translation.trim()));
+    if (selectedRows.length === 0) {
+      showNotif("Tidak ada baris terpilih yang memiliki teks untuk diimpor.", "error");
+      return;
+    }
+
+    const newLines: KitabLine[] = selectedRows.map((row, idx) => {
+      const wordsArr = row.arabic.trim()
+        ? row.arabic.trim().split(/\s+/).map((word, wIdx) => ({
+            id: `w-pdf-${Date.now()}-${idx}-${wIdx}-${Math.random()}`,
+            arabic: word,
+            makna: "",
+            symbol: ""
+          }))
+        : [];
+      return {
+        id: `line-pdf-${Date.now()}-${idx}-${Math.random()}`,
+        arabicFull: row.arabic || "...",
+        translationFull: row.translation || "",
+        notes: "Hasil otomatisasi impor PDF.",
+        words: wordsArr,
+        matan: "",
+        syarah: "",
+        hasyiyah: "",
+        taliq: ""
+      };
+    });
+
+    let targetChId = pdfTargetChapterId;
+    let targetSecId = "";
+
+    setProject(prev => {
+      let updatedChapters = [...prev.chapters];
+
+      if (targetChId === "new") {
+        const newChapterId = `ch-pdf-${Date.now()}`;
+        const newSectionId = `sec-pdf-${Date.now()}`;
+        targetChId = newChapterId;
+        targetSecId = newSectionId;
+
+        const newChapter = {
+          id: newChapterId,
+          title: pdfNewChapterTitle || "Bab Hasil Impor PDF",
+          category: pdfNewChapterCategory || "Umum",
+          order: prev.chapters.length + 1,
+          sections: [
+            {
+              id: newSectionId,
+              title: "Fasal Hasil Impor PDF",
+              lines: newLines,
+              order: 1
+            }
+          ]
+        };
+        updatedChapters.push(newChapter);
+      } else {
+        updatedChapters = updatedChapters.map(ch => {
+          if (ch.id === targetChId) {
+            let updatedSections = [...ch.sections];
+            if (updatedSections.length === 0) {
+              const newSectionId = `sec-pdf-${Date.now()}`;
+              targetSecId = newSectionId;
+              updatedSections.push({
+                id: newSectionId,
+                title: "Fasal Hasil Impor PDF",
+                lines: newLines,
+                order: 1
+              });
+            } else {
+              targetSecId = updatedSections[0].id;
+              updatedSections[0] = {
+                ...updatedSections[0],
+                lines: [...updatedSections[0].lines, ...newLines]
+              };
+            }
+            return {
+              ...ch,
+              sections: updatedSections
+            };
+          }
+          return ch;
+        });
+      }
+
+      return {
+        ...prev,
+        chapters: updatedChapters,
+        dateModified: new Date().toISOString()
+      };
+    });
+
+    setActiveChapterId(targetChId);
+    if (targetSecId) {
+      setActiveSectionId(targetSecId);
+    }
+
+    if (newLines.length > 0) {
+      setActiveLineId(newLines[0].id);
+    }
+
+    setShowPdfModal(false);
+    showNotif(`Berhasil mengimpor ${newLines.length} baris dari PDF ke bab!`, "success");
+    setTimeout(() => {
+      saveToLocalStorage();
+    }, 100);
   }
 
   function handleResetToDefaults() {
@@ -1740,7 +2225,31 @@ export default function App() {
   const matchingLineSearchResults: Array<{ chapterTitle: string; sectionTitle: string; line: KitabLine }> = [];
   if (kitabSearch.trim().length >= 2) {
     const cleanQuery = stripDiacritics(kitabSearch).toLowerCase();
-    project.chapters.forEach(ch => {
+    
+    let startIdx = 0;
+    let endIdx = project.chapters.length - 1;
+    
+    if (kitabSearchStartChapterId !== "all") {
+      const idx = project.chapters.findIndex(c => c.id === kitabSearchStartChapterId);
+      if (idx !== -1) startIdx = idx;
+    }
+    if (kitabSearchEndChapterId !== "all") {
+      const idx = project.chapters.findIndex(c => c.id === kitabSearchEndChapterId);
+      if (idx !== -1) endIdx = idx;
+    }
+    
+    const minIdx = Math.min(startIdx, endIdx);
+    const maxIdx = Math.max(startIdx, endIdx);
+    
+    project.chapters.forEach((ch, chIdx) => {
+      // 1. Filter by Chapter Range
+      if (chIdx < minIdx || chIdx > maxIdx) return;
+      
+      // 2. Filter by Category
+      const chCategory = ch.category || "Umum";
+      if (kitabSearchCategory !== "Semua" && chCategory !== kitabSearchCategory) return;
+      
+      // 3. Search lines
       ch.sections.forEach(sec => {
         sec.lines.forEach(line => {
           const cleanLineArabic = stripDiacritics(line.arabicFull).toLowerCase();
@@ -1849,6 +2358,23 @@ export default function App() {
             ref={fileLoaderRef}
             onChange={handleImportProjectFile}
           />
+          <input
+            type="file"
+            accept="application/pdf"
+            className="hidden"
+            ref={pdfLoaderRef}
+            onChange={handleImportPdfFile}
+          />
+          <button
+            id="btn-import-pdf"
+            onClick={() => pdfLoaderRef.current?.click()}
+            className="hover:text-rose-400 font-medium transition-colors cursor-pointer flex items-center gap-1 text-rose-300"
+            title="Unggah kitab PDF dan baca isinya secara otomatis untuk diimpor"
+          >
+            <FileText size={14} />
+            <span>Auto-Baca PDF</span>
+          </button>
+          
           <button
             id="btn-import-kitab"
             onClick={() => fileLoaderRef.current?.click()}
@@ -1960,7 +2486,7 @@ export default function App() {
               </span>
             </h2>
             
-            <div className="flex gap-1.5">
+            <div className="flex gap-1.5 mb-2">
               <input
                 type="text"
                 placeholder="Tambah Bab Baru..."
@@ -1977,6 +2503,43 @@ export default function App() {
                 <Plus size={15} />
               </button>
             </div>
+            <div className="flex items-center gap-1.5 text-[10px]">
+              <span className="text-zinc-500 font-medium">Kategori:</span>
+              <select
+                value={newChapterCategory}
+                onChange={(e) => setNewChapterCategory(e.target.value)}
+                className="flex-1 bg-[#161616] border border-zinc-850 rounded px-2 py-1 text-zinc-300 focus:outline-none focus:border-emerald-600 cursor-pointer"
+              >
+                <option value="Umum">Umum</option>
+                <option value="Nahwu">Nahwu</option>
+                <option value="Shorof">Shorof</option>
+                <option value="Fiqh">Fiqh</option>
+                <option value="Tasawwuf">Tasawwuf</option>
+                <option value="Tauhid">Tauhid</option>
+                <option value="Hadits">Hadits</option>
+                <option value="Tafsir">Tafsir</option>
+              </select>
+            </div>
+
+            {/* Dropdown Filter Bab */}
+            <div className="flex items-center gap-1.5 text-[10px] mt-2 pt-2 border-t border-zinc-900/60">
+              <span className="text-emerald-500 font-bold uppercase tracking-wider text-[9px]">Saring Bab:</span>
+              <select
+                value={sidebarCategoryFilter}
+                onChange={(e) => setSidebarCategoryFilter(e.target.value)}
+                className="flex-1 bg-[#0b2f1a]/80 border border-[#165030]/60 rounded px-2 py-1 text-[#59ff9b] font-bold focus:outline-none cursor-pointer text-[10px]"
+              >
+                <option value="Semua">Semua Jenis Kitab</option>
+                <option value="Umum">Umum</option>
+                <option value="Nahwu">Nahwu</option>
+                <option value="Shorof">Shorof</option>
+                <option value="Fiqh">Fiqh</option>
+                <option value="Tasawwuf">Tasawwuf</option>
+                <option value="Tauhid">Tauhid</option>
+                <option value="Hadits">Hadits</option>
+                <option value="Tafsir">Tafsir</option>
+              </select>
+            </div>
           </div>
 
           {/* Hierarchy Directory List */}
@@ -1984,39 +2547,81 @@ export default function App() {
             {project.chapters.length === 0 ? (
               <p className="text-xs text-zinc-650 italic text-center p-4">Kitab belum memiliki bab.</p>
             ) : (
-              project.chapters.map((ch, chIdx) => {
-                const isChActive = ch.id === activeChapterId;
-                return (
-                  <div key={ch.id} className="space-y-1">
-                    {/* Chapter Header */}
-                    <div
-                      onClick={() => {
-                        setActiveChapterId(ch.id);
-                        if (ch.sections.length > 0) {
-                          setActiveSectionId(ch.sections[0].id);
-                          if (ch.sections[0].lines.length > 0) {
-                            setActiveLineId(ch.sections[0].lines[0].id);
+              (() => {
+                const filteredChapters = project.chapters
+                  .map((ch, originalIdx) => ({ ch, originalIdx }))
+                  .filter(({ ch }) => sidebarCategoryFilter === "Semua" || (ch.category || "Umum") === sidebarCategoryFilter);
+
+                if (filteredChapters.length === 0) {
+                  return (
+                    <div className="text-center p-6 text-xs text-zinc-600 italic">
+                      Tidak ada bab dengan kategori "{sidebarCategoryFilter}".
+                    </div>
+                  );
+                }
+
+                return filteredChapters.map(({ ch, originalIdx }) => {
+                  const isChActive = ch.id === activeChapterId;
+                  return (
+                    <div key={ch.id} className="space-y-1">
+                      {/* Chapter Header */}
+                      <div
+                        onClick={() => {
+                          setActiveChapterId(ch.id);
+                          if (ch.sections.length > 0) {
+                            setActiveSectionId(ch.sections[0].id);
+                            if (ch.sections[0].lines.length > 0) {
+                              setActiveLineId(ch.sections[0].lines[0].id);
+                            } else {
+                              setActiveLineId("");
+                            }
                           } else {
+                            setActiveSectionId("");
                             setActiveLineId("");
                           }
-                        } else {
-                          setActiveSectionId("");
-                          setActiveLineId("");
-                        }
-                      }}
-                      className={`flex items-center justify-between p-2 rounded cursor-pointer transition ${
-                        isChActive
-                          ? "bg-zinc-800/60 text-white border-l-2 border-emerald-500"
-                          : "hover:bg-zinc-900/40 text-zinc-400"
-                      }`}
-                    >
-                      <div className="flex items-center gap-2 truncate">
-                        <span className="text-[10px] text-emerald-500 font-mono">#{chIdx + 1}</span>
-                        <span className="text-xs font-semibold truncate uppercase">{ch.title}</span>
+                        }}
+                        className={`flex items-center justify-between p-2 rounded cursor-pointer transition ${
+                          isChActive
+                            ? "bg-zinc-800/60 text-white border-l-2 border-emerald-500"
+                            : "hover:bg-zinc-900/40 text-zinc-400"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 truncate">
+                          <span className="text-[10px] text-emerald-500 font-mono">#{originalIdx + 1}</span>
+                        <div className="flex flex-col truncate">
+                          <span className="text-xs font-semibold truncate uppercase leading-tight">{ch.title}</span>
+                          <div className="mt-1" onClick={(e) => e.stopPropagation()}>
+                            <select
+                              value={ch.category || "Umum"}
+                              onChange={(e) => {
+                                const updatedVal = e.target.value;
+                                setProject(prev => ({
+                                  ...prev,
+                                  chapters: prev.chapters.map(c => c.id === ch.id ? { ...c, category: updatedVal } : c)
+                                }));
+                                showNotif(`Kategori bab diubah menjadi: ${updatedVal}`, "success");
+                              }}
+                              className={`${
+                                isChActive 
+                                  ? "bg-zinc-900 border-zinc-700 text-emerald-400" 
+                                  : "bg-zinc-950 border-zinc-850 text-zinc-500"
+                              } text-[8.5px] font-mono uppercase border rounded px-1 py-0.5 cursor-pointer max-w-[90px] truncate focus:outline-none`}
+                            >
+                              <option value="Umum">Umum</option>
+                              <option value="Nahwu">Nahwu</option>
+                              <option value="Shorof">Shorof</option>
+                              <option value="Fiqh">Fiqh</option>
+                              <option value="Tasawwuf">Tasawwuf</option>
+                              <option value="Tauhid">Tauhid</option>
+                              <option value="Hadits">Hadits</option>
+                              <option value="Tafsir">Tafsir</option>
+                            </select>
+                          </div>
+                        </div>
                       </div>
                       <button
                         onClick={(e) => handleDeleteChapter(ch.id, e)}
-                        className="p-1 text-zinc-600 hover:text-red-400 transition opacity-0 hover:opacity-100 focus:opacity-100 group-hover:opacity-100"
+                        className="p-1 text-zinc-650 hover:text-red-400 transition"
                         title="Hapus Bab ini"
                       >
                         <Trash2 size={12} />
@@ -2082,7 +2687,8 @@ export default function App() {
                     )}
                   </div>
                 );
-              })
+                })
+              })()
             )}
           </div>
 
@@ -3115,7 +3721,7 @@ export default function App() {
 
                   </div>
                 ) : (
-                  <div className="p-8 text-center text-zinc-600 italic space-y-2">
+                  <div className="p-8 text-center text-[#555555] italic space-y-2">
                     <p className="text-xs">Pilih salah satu baris paragraf kitab di panel kiri/tengah untuk memuat perkakas editor.</p>
                   </div>
                 )}
@@ -3123,8 +3729,6 @@ export default function App() {
             )}
           </div>
         </main>
-
-        {/* SIDEBAR RIGHT: Kamus Offline & Pencarian */}
         <AnimatePresence initial={false}>
           {showRightSidebar && (
             <motion.aside
@@ -3136,205 +3740,567 @@ export default function App() {
               className="bg-[#111111] border-l border-zinc-900 flex flex-col select-none overflow-hidden h-full shrink-0"
             >
               <div className="w-[340px] h-full flex flex-col shrink-0">
-            
-            {/* Nav tabs for search tool (Kamus vs Naskah search) */}
-            <div className="p-4 border-b border-zinc-900 space-y-4">
-              <div className="flex justify-between items-center">
-                <h2 className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 flex items-center gap-1.5">
-                  <BookMarked size={14} className="text-emerald-500" />
-                  <span>Referensi & Kamus Pintar</span>
-                </h2>
                 
-                <span className="text-[10px] text-zinc-650 italic">
-                  {dictionary.length} entri terdaftar
-                </span>
-              </div>
-
-              {/* Keyword text search ignoring diacritics */}
-              <div className="relative">
-                <input
-                  type="text"
-                  placeholder="Cari lafadz (bisa tanpa harakat)..."
-                  value={kamusSearch}
-                  onChange={(e) => setKamusSearch(e.target.value)}
-                  className="w-full bg-[#161616] border border-zinc-800 rounded pl-9 pr-3 py-1.5 text-xs text-zinc-100 placeholder-zinc-600 focus:border-emerald-600 focus:outline-none"
-                />
-                <Search size={14} className="absolute left-3 top-2 text-zinc-600" />
-              </div>
-
-              {/* Category Filters row */}
-              <div className="flex flex-wrap gap-1">
-                {uniqueCategories.map(cat => (
+                {/* Right Sidebar Tab switchers */}
+                <div className="p-2 bg-zinc-950 border-b border-zinc-900 flex gap-1 shrink-0">
                   <button
-                    key={cat}
-                    onClick={() => setKamusFilterCategory(cat)}
-                    className={`px-2 py-0.5 rounded-full text-[9px] transition-all font-semibold ${
-                      kamusFilterCategory === cat
-                        ? "bg-emerald-600 text-white"
-                        : "bg-zinc-900 hover:bg-zinc-800 text-zinc-400"
+                    onClick={() => setRightSidebarTab("kamus")}
+                    className={`flex-1 py-1.5 px-2.5 rounded text-[10px] font-bold uppercase tracking-wider text-center transition flex items-center justify-center gap-1 border cursor-pointer ${
+                      rightSidebarTab === "kamus"
+                        ? "bg-[#0b2f1a]/80 text-[#59ff9b] border-[#165030]/60 font-bold"
+                        : "bg-transparent text-zinc-500 border-transparent hover:text-zinc-350 hover:bg-zinc-900/40"
                     }`}
                   >
-                    {cat}
+                    <BookMarked size={12} />
+                    <span>Kamus & Cari</span>
                   </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Dictionary Results lists */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-2.5 scrollbar-thin scrollbar-thumb-zinc-800">
-              {matchingDictionary.length === 0 ? (
-                <div className="text-center p-6 text-xs text-zinc-650 italic">
-                  Tidak ada istilah kamus yang cocok.
-                </div>
-              ) : (
-                matchingDictionary.map(item => (
-                  <div
-                    key={item.id}
-                    className="p-3 rounded bg-zinc-950/70 border border-zinc-900 hover:border-zinc-800 transition relative group/item"
+                  <button
+                    onClick={() => setRightSidebarTab("kamera")}
+                    className={`flex-1 py-1.5 px-2.5 rounded text-[10px] font-bold uppercase tracking-wider text-center transition flex items-center justify-center gap-1 border cursor-pointer ${
+                      rightSidebarTab === "kamera"
+                        ? "bg-[#0b2f1a]/80 text-[#59ff9b] border-[#165030]/60 font-bold"
+                        : "bg-transparent text-zinc-500 border-transparent hover:text-zinc-350 hover:bg-zinc-900/40"
+                    }`}
                   >
-                    <div className="flex justify-between items-center mb-1.5 flex-row-reverse">
-                      <span className="font-serif text-xl font-bold text-zinc-100" dir="rtl">{item.keyword}</span>
-                      {item.category && (
-                        <span className="text-[8.5px] uppercase tracking-wider text-emerald-500 font-mono font-bold bg-emerald-950/40 px-1.5 rounded">
-                          {item.category}
+                    <Camera size={12} />
+                    <span>Kamera Referensi</span>
+                  </button>
+                </div>
+
+                {rightSidebarTab === "kamus" ? (
+                  <div className="flex-1 flex flex-col overflow-hidden min-h-0">
+                    {/* Dictionary and Project search */}
+                    {/* Nav tabs for search tool (Kamus vs Naskah search) */}
+                    <div className="p-4 border-b border-zinc-900 space-y-4 shrink-0">
+                      <div className="flex justify-between items-center">
+                        <h2 className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 flex items-center gap-1.5">
+                          <BookMarked size={14} className="text-emerald-500" />
+                          <span>Referensi & Kamus Pintar</span>
+                        </h2>
+                        
+                        <span className="text-[10px] text-zinc-650 italic">
+                          {dictionary.length} entri terdaftar
                         </span>
+                      </div>
+
+                      {/* Keyword text search ignoring diacritics */}
+                      <div className="relative">
+                        <input
+                          type="text"
+                          placeholder="Cari lafadz (bisa tanpa harakat)..."
+                          value={kamusSearch}
+                          onChange={(e) => setKamusSearch(e.target.value)}
+                          className="w-full bg-[#161616] border border-zinc-800 rounded pl-9 pr-3 py-1.5 text-xs text-zinc-100 placeholder-zinc-600 focus:border-emerald-600 focus:outline-none"
+                        />
+                        <Search size={14} className="absolute left-3 top-2 text-zinc-600" />
+                      </div>
+
+                      {/* Category Filters row */}
+                      <div className="flex flex-wrap gap-1">
+                        {uniqueCategories.map(cat => (
+                          <button
+                            key={cat}
+                            onClick={() => setKamusFilterCategory(cat)}
+                            className={`px-2 py-0.5 rounded-full text-[9px] transition-all font-semibold cursor-pointer ${
+                              kamusFilterCategory === cat
+                                ? "bg-emerald-600 text-white"
+                                : "bg-zinc-900 hover:bg-zinc-800 text-zinc-400"
+                            }`}
+                          >
+                            {cat}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Dictionary Results lists */}
+                    <div className="flex-1 overflow-y-auto p-4 space-y-2.5 scrollbar-thin scrollbar-thumb-zinc-800">
+                      {matchingDictionary.length === 0 ? (
+                        <div className="text-center p-6 text-xs text-zinc-650 italic">
+                          Tidak ada istilah kamus yang cocok.
+                        </div>
+                      ) : (
+                        matchingDictionary.map(item => (
+                          <div
+                            key={item.id}
+                            className="p-3 rounded bg-zinc-950/70 border border-zinc-900 hover:border-zinc-800 transition relative group/item"
+                          >
+                            <div className="flex justify-between items-center mb-1.5 flex-row-reverse">
+                              <span className="font-serif text-xl font-bold text-zinc-100" dir="rtl">{item.keyword}</span>
+                              {item.category && (
+                                <span className="text-[8.5px] uppercase tracking-wider text-emerald-500 font-mono font-bold bg-emerald-950/40 px-1.5 rounded">
+                                  {item.category}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-xs text-zinc-400 font-sans leading-relaxed text-left" dir="ltr">
+                              {item.translation}
+                            </p>
+
+                            <button
+                              onClick={() => handleDeleteKamusItem(item.id)}
+                              className="absolute bottom-2.5 right-2 px-1 py-0.5 rounded bg-zinc-900 text-zinc-700 hover:text-red-400 opacity-0 group-hover/item:opacity-100 transition-opacity cursor-pointer"
+                              title="Hapus kata dari kamus"
+                            >
+                              <Trash2 size={10} />
+                            </button>
+                          </div>
+                        ))
                       )}
                     </div>
-                    <p className="text-xs text-zinc-400 font-sans leading-relaxed text-left" dir="ltr">
-                      {item.translation}
-                    </p>
 
-                    <button
-                      onClick={() => handleDeleteKamusItem(item.id)}
-                      className="absolute bottom-2.5 right-2 px-1 py-0.5 rounded bg-zinc-900 text-zinc-700 hover:text-red-400 opacity-0 group-hover/item:opacity-100 transition-opacity"
-                      title="Hapus kata dari kamus"
-                    >
-                      <Trash2 size={10} />
-                    </button>
-                  </div>
-                ))
-              )}
-            </div>
+                    {/* Custom Interactive additions to the Dictionary */}
+                    <div className="p-3 border-y border-zinc-900 bg-zinc-950/50 space-y-3 shrink-0">
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-[#a855f7] block">
+                        Tambah Kosakata Kamus Populer
+                      </span>
 
-            {/* Custom Interactive additions to the Dictionary */}
-            <div className="p-3 border-y border-zinc-900 bg-zinc-950/50 space-y-3">
-              <span className="text-[10px] font-bold uppercase tracking-widest text-[#a855f7] block">
-                Tambah Kosakata Kamus Populer
-              </span>
-
-              <div className="grid grid-cols-2 gap-2">
-                <input
-                  type="text"
-                  placeholder="Lafadz Arab (contoh: رَحِمَ)"
-                  value={newKamusKeyword}
-                  onChange={(e) => setNewKamusKeyword(e.target.value)}
-                  className="w-full bg-[#1c1c1c] border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-100"
-                />
-                <input
-                  type="text"
-                  placeholder="Terjemahan (contoh: Mengasihi)"
-                  value={newKamusTranslation}
-                  onChange={(e) => setNewKamusTranslation(e.target.value)}
-                  className="w-full bg-[#1c1c1c] border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-100"
-                />
-              </div>
-
-              <div className="flex justify-between items-center gap-2">
-                <select
-                  value={newKamusCategory}
-                  onChange={(e) => setNewKamusCategory(e.target.value)}
-                  className="bg-[#1c1c1c] border border-zinc-800 rounded px-1.5 py-1 text-[10px] text-zinc-300 focus:outline-none"
-                >
-                  <option value="Umum">Umum</option>
-                  <option value="Nahwu">Nahwu</option>
-                  <option value="Shorof">Shorof</option>
-                  <option value="Fiqh">Fiqh</option>
-                  <option value="Tasawwuf">Tasawwuf</option>
-                </select>
-
-                <button
-                  onClick={handleAddKamusItem}
-                  className="px-3.5 py-1 bg-emerald-600 hover:bg-emerald-500 rounded text-[10px] text-white font-bold whitespace-nowrap"
-                >
-                  Daftarkan Lafadz +
-                </button>
-              </div>
-
-              {/* CSV Import */}
-              <div className="pt-2 border-t border-zinc-900 flex justify-between items-center">
-                <span className="text-[9px] text-zinc-550">Impor Kamus dari CSV:</span>
-                <input
-                  type="file"
-                  accept=".csv,text/csv"
-                  className="hidden"
-                  ref={kamusLoaderRef}
-                  onChange={handleImportKamusCSV}
-                />
-                <button
-                  onClick={() => kamusLoaderRef.current?.click()}
-                  className="text-[9.5px] font-bold text-sky-400 hover:underline flex items-center gap-0.5"
-                >
-                  Unggah CSV
-                </button>
-              </div>
-            </div>
-
-            {/* Global Project search section */}
-            <div className="p-3.5 bg-zinc-950/80 border-t border-zinc-900 space-y-2">
-              <span className="text-[10px] font-semibold text-zinc-400 uppercase tracking-widest block">
-                Pencarian Kitab Utama (Ignore Harakat)
-              </span>
-              <input
-                type="text"
-                placeholder="Cari lafadz atau terjemah di seluruh bab..."
-                value={kitabSearch}
-                onChange={(e) => setKitabSearch(e.target.value)}
-                className="w-full bg-[#161616] border border-zinc-850 rounded px-2.5 py-1 text-xs text-zinc-200 placeholder-zinc-700 focus:outline-none focus:border-indigo-600"
-              />
-              
-              {kitabSearch.trim().length >= 2 && (
-                <div className="max-h-24 overflow-y-auto space-y-1.5 pt-1">
-                  {matchingLineSearchResults.length === 0 ? (
-                    <span className="text-[9.5px] text-zinc-600 italic block">Tidak ada hasil di bab-bab kitab.</span>
-                  ) : (
-                    matchingLineSearchResults.map((res, i) => (
-                      <div
-                        key={i}
-                        onClick={() => {
-                          // Try activating
-                          setActiveLineId(res.line.id);
-                        }}
-                        className="p-1 px-2 rounded bg-zinc-900 hover:bg-zinc-800 text-[10px] text-zinc-300 cursor-pointer truncate border border-zinc-800/40"
-                      >
-                        <span className="text-emerald-500 font-bold font-serif">{res.line.arabicFull.substring(0, 30)}... </span>
-                        <span className="text-zinc-500">({res.sectionTitle})</span>
+                      <div className="grid grid-cols-2 gap-2">
+                        <input
+                          type="text"
+                          placeholder="Lafadz Arab (contoh: رَحِمَ)"
+                          value={newKamusKeyword}
+                          onChange={(e) => setNewKamusKeyword(e.target.value)}
+                          className="w-full bg-[#1c1c1c] border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-100 placeholder-zinc-700 focus:outline-none"
+                        />
+                        <input
+                          type="text"
+                          placeholder="Terjemahan (contoh: Mengasihi)"
+                          value={newKamusTranslation}
+                          onChange={(e) => setNewKamusTranslation(e.target.value)}
+                          className="w-full bg-[#1c1c1c] border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-100 placeholder-zinc-700 focus:outline-none"
+                        />
                       </div>
-                    ))
-                  )}
-                </div>
-              )}
-            </div>
 
-            {/* Statistics and Information status block */}
-            <div className="p-4 border-t border-zinc-900 mt-auto bg-zinc-950/40">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[10px] text-zinc-500 uppercase font-semibold">Statistik Naskah</span>
-              </div>
-              <div className="grid grid-cols-3 gap-1.5 text-center text-zinc-300">
-                <div className="p-2 bg-zinc-900/80 rounded border border-zinc-850">
-                  <p className="text-[9px] text-zinc-500 uppercase leading-none">Lafadz</p>
-                  <p className="text-sm font-bold text-emerald-400 mt-1">{totalArabicWords}</p>
-                </div>
-                <div className="p-2 bg-zinc-900/80 rounded border border-zinc-850">
-                  <p className="text-[9px] text-zinc-500 uppercase leading-none">Baris</p>
-                  <p className="text-sm font-bold text-zinc-100 mt-1">{totalLines}</p>
-                </div>
-                <div className="p-2 bg-zinc-900/80 rounded border border-zinc-850">
-                  <p className="text-[9px] text-zinc-500 uppercase leading-none">Fasal</p>
-                  <p className="text-sm font-bold text-indigo-400 mt-1">{totalSections}</p>
-                </div>
-              </div>
-            </div>
+                      <div className="flex justify-between items-center gap-2">
+                        <select
+                          value={newKamusCategory}
+                          onChange={(e) => setNewKamusCategory(e.target.value)}
+                          className="bg-[#1c1c1c] border border-zinc-800 rounded px-1.5 py-1 text-[10px] text-zinc-300 focus:outline-none cursor-pointer"
+                        >
+                          <option value="Umum">Umum</option>
+                          <option value="Nahwu">Nahwu</option>
+                          <option value="Shorof">Shorof</option>
+                          <option value="Fiqh">Fiqh</option>
+                          <option value="Tasawwuf">Tasawwuf</option>
+                        </select>
+
+                        <button
+                          onClick={handleAddKamusItem}
+                          className="px-3.5 py-1 bg-emerald-600 hover:bg-emerald-500 rounded text-[10px] text-white font-bold whitespace-nowrap cursor-pointer"
+                        >
+                          Daftarkan Lafadz +
+                        </button>
+                      </div>
+
+                      {/* CSV Import */}
+                      <div className="pt-2 border-t border-zinc-900 flex justify-between items-center">
+                        <span className="text-[9px] text-zinc-550">Impor Kamus dari CSV:</span>
+                        <input
+                          type="file"
+                          accept=".csv,text/csv"
+                          className="hidden"
+                          ref={kamusLoaderRef}
+                          onChange={handleImportKamusCSV}
+                        />
+                        <button
+                          onClick={() => kamusLoaderRef.current?.click()}
+                          className="text-[9.5px] font-bold text-sky-400 hover:underline flex items-center gap-0.5 cursor-pointer bg-transparent border-none"
+                        >
+                          Unggah CSV
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Global Project search section */}
+                    <div className="p-3.5 bg-zinc-950/80 border-t border-zinc-900 space-y-3 shrink-0">
+                      <span className="text-[10px] font-semibold text-zinc-400 uppercase tracking-widest block flex items-center justify-between">
+                        <span>Pencarian Kitab Utama</span>
+                        <span className="text-[9px] text-indigo-400 lowercase">(ignore harakat)</span>
+                      </span>
+                      
+                      <div className="relative">
+                        <input
+                          type="text"
+                          placeholder="Cari lafadz atau terjemah..."
+                          value={kitabSearch}
+                          onChange={(e) => setKitabSearch(e.target.value)}
+                          className="w-full bg-[#161616] border border-zinc-850 rounded pl-3 pr-8 py-1.5 text-xs text-zinc-200 placeholder-zinc-700 focus:outline-none focus:border-indigo-600"
+                        />
+                        {kitabSearch.trim().length > 0 && (
+                          <button
+                            onClick={() => setKitabSearch("")}
+                            className="absolute right-2.5 top-2.5 text-zinc-600 hover:text-white text-[12px] font-bold leading-none cursor-pointer"
+                            title="Kosongkan"
+                          >
+                            ×
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Advanced Filters Area */}
+                      <div className="bg-zinc-900/40 border border-zinc-900 rounded p-2 text-y-2 mt-1 space-y-2">
+                        <div className="text-[9.5px] font-bold text-zinc-500 uppercase tracking-wide flex justify-between items-center">
+                          <span>Filter Lanjutan</span>
+                          {(kitabSearchCategory !== "Semua" || kitabSearchStartChapterId !== "all" || kitabSearchEndChapterId !== "all") && (
+                            <button
+                              onClick={() => {
+                                setKitabSearchCategory("Semua");
+                                setKitabSearchStartChapterId("all");
+                                setKitabSearchEndChapterId("all");
+                              }}
+                              className="text-amber-500 hover:text-amber-400 capitalize font-semibold text-[8px] cursor-pointer bg-transparent"
+                            >
+                              Reset Filter
+                            </button>
+                          )}
+                        </div>
+
+                        {/* 1. Kategori Filter */}
+                        <div className="space-y-1">
+                          <span className="text-[9px] text-zinc-400 block font-medium">Berdasarkan Kategori:</span>
+                          <select
+                            value={kitabSearchCategory}
+                            onChange={(e) => setKitabSearchCategory(e.target.value)}
+                            className="w-full bg-[#161616] border border-zinc-850 rounded px-2 py-1 text-[10px] text-zinc-300 focus:outline-none cursor-pointer"
+                          >
+                            <option value="Semua">Semua Kategori</option>
+                            <option value="Umum">Umum</option>
+                            <option value="Nahwu">Nahwu</option>
+                            <option value="Shorof">Shorof</option>
+                            <option value="Fiqh">Fiqh</option>
+                            <option value="Tasawwuf">Tasawwuf</option>
+                            <option value="Tauhid">Tauhid</option>
+                            <option value="Hadits">Hadits</option>
+                            <option value="Tafsir">Tafsir</option>
+                          </select>
+                        </div>
+
+                        {/* 2. Rentang Bab Filter */}
+                        <div className="space-y-1">
+                          <span className="text-[9px] text-zinc-400 block font-medium">Rentang Bab:</span>
+                          <div className="grid grid-cols-2 gap-1.5">
+                            <div>
+                              <span className="text-[8px] text-zinc-500 block leading-none mb-0.5">Dari Bab:</span>
+                              <select
+                                value={kitabSearchStartChapterId}
+                                onChange={(e) => setKitabSearchStartChapterId(e.target.value)}
+                                className="w-full bg-[#161616] border border-zinc-850 rounded px-1.5 py-1 text-[9px] text-zinc-300 focus:outline-none cursor-pointer truncate"
+                              >
+                                <option value="all">Mulai Pertama</option>
+                                {project.chapters.map((ch, i) => (
+                                  <option key={ch.id} value={ch.id}>
+                                    {"Bab " + (i + 1) + ": " + ch.title.substring(0, 16)}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <div>
+                              <span className="text-[8px] text-zinc-500 block leading-none mb-0.5">Sampai Bab:</span>
+                              <select
+                                value={kitabSearchEndChapterId}
+                                onChange={(e) => setKitabSearchEndChapterId(e.target.value)}
+                                className="w-full bg-[#161616] border border-zinc-850 rounded px-1.5 py-1 text-[9px] text-zinc-300 focus:outline-none cursor-pointer truncate"
+                              >
+                                <option value="all">Hingga Akhir</option>
+                                {project.chapters.map((ch, i) => (
+                                  <option key={ch.id} value={ch.id}>
+                                    {"Bab " + (i + 1) + ": " + ch.title.substring(0, 16)}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Status & Results */}
+                      {kitabSearch.trim().length >= 2 && (
+                        <div className="text-[9px] text-zinc-500 italic px-0.5 flex justify-between pt-1">
+                          <span>Hasil pencarian:</span>
+                          <span className="text-emerald-400 font-bold">{matchingLineSearchResults.length} baris cocok</span>
+                        </div>
+                      )}
+                      
+                      {kitabSearch.trim().length >= 2 && (
+                        <div className="max-h-36 overflow-y-auto space-y-1.5 pt-1 scrollbar-thin scrollbar-thumb-zinc-800">
+                          {matchingLineSearchResults.length === 0 ? (
+                            <span className="text-[9.5px] text-zinc-600 italic block text-center py-2">Tidak ada hasil cocok.</span>
+                          ) : (
+                            matchingLineSearchResults.map((res, i) => {
+                              const chIdx = project.chapters.findIndex(c => c.title === res.chapterTitle);
+                              return (
+                                <div
+                                  key={i}
+                                  onClick={() => {
+                                    const matchedCh = project.chapters.find(ch => 
+                                      ch.sections.some(s => s.id === res.line.id || s.lines.some(l => l.id === res.line.id))
+                                    ) || project.chapters.find(ch => ch.title === res.chapterTitle);
+                                    
+                                    if (matchedCh) {
+                                      setActiveChapterId(matchedCh.id);
+                                      const matchedSec = matchedCh.sections.find(s => 
+                                        s.lines.some(l => l.id === res.line.id)
+                                      );
+                                      if (matchedSec) {
+                                        setActiveSectionId(matchedSec.id);
+                                      }
+                                    }
+                                    setActiveLineId(res.line.id);
+                                    showNotif(`Menampilkan hasil #${i + 1}`, "info");
+                                  }}
+                                  className="p-1.5 rounded bg-[#151515] hover:bg-[#1f1f1f] border border-zinc-900 hover:border-zinc-800 transition text-[10px] text-zinc-300 cursor-pointer flex flex-col space-y-0.5 text-left"
+                                >
+                                  <div className="flex justify-between text-[8px] text-zinc-500 font-semibold space-x-1">
+                                    <span className="uppercase text-indigo-400 truncate max-w-[110px]">Bab {chIdx !== -1 ? chIdx + 1 : ""} - {res.chapterTitle}</span>
+                                    <span className="truncate max-w-[110px]">◈ {res.sectionTitle}</span>
+                                  </div>
+                                  <p className="text-emerald-400 font-bold font-serif text-right pr-1 truncate animate-fade-in" dir="rtl">
+                                    {res.line.arabicFull}
+                                  </p>
+                                  <p className="text-[9px] text-zinc-550 italic truncate pl-1">
+                                    {res.line.translationFull || "Belum ada terjemahan..."}
+                                  </p>
+                                </div>
+                              );
+                            })
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Statistics and Information status block */}
+                    <div className="p-4 border-t border-zinc-900 mt-auto bg-zinc-950/40 shrink-0">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[10px] text-zinc-500 uppercase font-semibold">Statistik Naskah</span>
+                      </div>
+                      <div className="grid grid-cols-3 gap-1.5 text-center text-zinc-300">
+                        <div className="p-2 bg-zinc-900/80 rounded border border-zinc-850">
+                          <p className="text-[9px] text-zinc-500 uppercase leading-none">Lafadz</p>
+                          <p className="text-sm font-bold text-emerald-400 mt-1">{totalArabicWords}</p>
+                        </div>
+                        <div className="p-2 bg-zinc-900/80 rounded border border-zinc-850">
+                          <p className="text-[9px] text-zinc-500 uppercase leading-none">Baris</p>
+                          <p className="text-sm font-bold text-zinc-100 mt-1">{totalLines}</p>
+                        </div>
+                        <div className="p-2 bg-zinc-900/80 rounded border border-zinc-850">
+                          <p className="text-[9px] text-zinc-500 uppercase leading-none">Fasal</p>
+                          <p className="text-sm font-bold text-indigo-400 mt-1">{totalSections}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  /* CAMERA REFERENCE VIEW PANEL */
+                  <div className="flex-1 flex flex-col overflow-y-auto p-4 space-y-4 scrollbar-thin scrollbar-thumb-zinc-800">
+                    <div className="flex items-center justify-between">
+                      <h2 className="text-[10px] font-bold uppercase tracking-widest text-[#a855f7] flex items-center gap-1.5">
+                        <Camera size={14} className="text-emerald-500" />
+                        <span>Kamera Referensi Kitab</span>
+                      </h2>
+                      {capturedRefImage && (
+                        <button
+                          onClick={resetViewport}
+                          className="text-[9px] text-[#eab308] hover:underline font-semibold bg-transparent border-none cursor-pointer"
+                        >
+                          Reset Posisi
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Camera active live stream OR captured static image image viewing */}
+                    {isCameraActive ? (
+                      <div className="relative rounded-lg overflow-hidden border border-emerald-900 bg-black flex flex-col shadow-2xl animate-pulse">
+                        <video
+                          ref={videoRef}
+                          autoPlay
+                          playsInline
+                          className="w-full h-56 object-cover"
+                        />
+                        <div className="absolute inset-x-0 bottom-0 p-3 bg-gradient-to-t from-black/95 to-transparent flex gap-2 justify-center">
+                          <button
+                            onClick={handleCapturePhoto}
+                            className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10.5px] rounded flex items-center gap-1 hover:scale-105 active:scale-95 transition cursor-pointer"
+                          >
+                            <Camera size={13} />
+                            <span>Ambil Foto</span>
+                          </button>
+                          <button
+                            onClick={() => setIsCameraActive(false)}
+                            className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 text-[10.5px] rounded cursor-pointer"
+                          >
+                            Batal
+                          </button>
+                        </div>
+                      </div>
+                    ) : capturedRefImage ? (
+                      /* ACTIVE CANVAS REF PANEL */
+                      <div className="space-y-3 flex flex-col self-stretch">
+                        <div
+                          className="w-full h-[280px] bg-zinc-950 rounded-lg border border-zinc-805 relative overflow-hidden select-none cursor-grab active:cursor-grabbing group/viewport shadow-inner"
+                          onMouseDown={handleRefMouseDown}
+                          onMouseMove={handleRefMouseMove}
+                          onMouseUp={handleRefMouseUpOrLeave}
+                          onMouseLeave={handleRefMouseUpOrLeave}
+                          onTouchStart={handleRefTouchStart}
+                          onTouchMove={handleRefTouchMove}
+                          onTouchEnd={handleRefMouseUpOrLeave}
+                        >
+                          <img
+                            src={capturedRefImage}
+                            alt="Manuscript reference view"
+                            draggable={false}
+                            className="absolute pointer-events-none origin-center"
+                            style={{
+                              transform: `translate(${cameraPanX}px, ${cameraPanY}px) scale(${cameraZoom}) rotate(${cameraRotate}deg)`,
+                              filter: `brightness(${cameraBrightness}%) contrast(${cameraContrast}%)`,
+                              transition: isPanning ? "none" : "transform 0.15s ease-out, filter 0.1s ease-out"
+                            }}
+                          />
+                          {/* Instructions overlay */}
+                          <div className="absolute bottom-2 left-2 px-2 py-1 rounded bg-black/80 border border-zinc-800/80 text-[8.5px] text-zinc-400 pointer-events-none opacity-0 group-hover/viewport:opacity-100 transition-opacity">
+                            Drag untuk menggeser naskah / Zoom di bawah
+                          </div>
+                        </div>
+
+                        {/* Control panel options for enhancement rendering */}
+                        <div className="p-3.5 bg-zinc-950 border border-zinc-900 rounded-lg space-y-3.5">
+                          {/* ZOOMING SECTION */}
+                          <div className="space-y-1.5">
+                            <div className="flex justify-between items-center text-[10px] text-zinc-400">
+                              <span className="font-semibold text-zinc-300">Magnifikasi (Zoom):</span>
+                              <span className="font-mono text-emerald-400 font-bold">{Math.round(cameraZoom * 100)}%</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => setCameraZoom(p => Math.max(0.5, p - 0.2))}
+                                className="w-7 h-7 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 rounded font-bold transition flex items-center justify-center text-xs cursor-pointer"
+                              >
+                                -
+                              </button>
+                              <input
+                                type="range"
+                                min="0.5"
+                                max="4"
+                                step="0.1"
+                                value={cameraZoom}
+                                onChange={(e) => setCameraZoom(parseFloat(e.target.value))}
+                                className="flex-1 accent-emerald-500 h-1 bg-zinc-900 rounded-lg appearance-none cursor-pointer"
+                              />
+                              <button
+                                onClick={() => setCameraZoom(p => Math.min(4, p + 0.2))}
+                                className="w-7 h-7 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 rounded font-bold transition flex items-center justify-center text-xs cursor-pointer"
+                              >
+                                +
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* CAMERA 90 ROTATOR */}
+                          <div className="flex items-center justify-between text-[10px] text-zinc-400 pt-1 border-t border-zinc-900">
+                            <span className="font-semibold text-[#a855f7]">Orientasi Halaman:</span>
+                            <button
+                              onClick={() => setCameraRotate(r => (r + 90) % 360)}
+                              className="px-2.5 py-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded text-zinc-200 text-[10px] flex items-center gap-1.5 font-bold transition cursor-pointer"
+                            >
+                              <RotateCw size={11} className="text-teal-400" />
+                              <span>Putar 90°</span>
+                            </button>
+                          </div>
+
+                          {/* BRIGHTNESS CONTROL */}
+                          <div className="space-y-1.5 border-t border-zinc-900 pt-2.5">
+                            <div className="flex justify-between items-center text-[10px] text-zinc-400">
+                              <span>Pencahayaan (Brightness):</span>
+                              <span className="font-mono text-zinc-300 font-semibold">{cameraBrightness}%</span>
+                            </div>
+                            <input
+                              type="range"
+                              min="50"
+                              max="200"
+                              value={cameraBrightness}
+                              onChange={(e) => setCameraBrightness(parseInt(e.target.value))}
+                              className="w-full accent-indigo-500 h-1 bg-zinc-900 rounded-lg appearance-none cursor-pointer"
+                            />
+                          </div>
+
+                          {/* CONTRAST IMPROVEMENT */}
+                          <div className="space-y-1.5 border-t border-zinc-900 pt-2.5">
+                            <div className="flex justify-between items-center text-[10px] text-zinc-400">
+                              <span>Ketajaman Teks (Contrast):</span>
+                              <span className="font-mono text-zinc-300 font-semibold">{cameraContrast}%</span>
+                            </div>
+                            <input
+                              type="range"
+                              min="50"
+                              max="200"
+                              value={cameraContrast}
+                              onChange={(e) => setCameraContrast(parseInt(e.target.value))}
+                              className="w-full accent-[#a855f7] h-1 bg-zinc-900 rounded-lg appearance-none cursor-pointer"
+                            />
+                          </div>
+
+                          {/* DUAL BUTTON ACTIONS FOR RE-CAMERA OR TERMINATION */}
+                          <div className="flex gap-2 border-t border-zinc-900 pt-3 text-[10.5px]">
+                            <button
+                              onClick={() => setIsCameraActive(true)}
+                              className="flex-1 py-1.5 bg-[#141414] hover:bg-[#1a1a1a] border border-zinc-800 text-zinc-100 rounded font-bold flex items-center justify-center gap-1.5 transition cursor-pointer"
+                            >
+                              <Camera size={12} className="text-emerald-500" />
+                              <span>Ambil Ulang</span>
+                            </button>
+                            <button
+                              onClick={handleDeleteRefImage}
+                              className="px-3 py-1.5 bg-red-950/20 hover:bg-red-950/50 border border-red-900/30 text-red-400 rounded font-bold flex items-center justify-center gap-1.5 transition cursor-pointer"
+                            >
+                              <Trash2 size={12} />
+                              <span>Hapus</span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      /* BLANK/EMPTY REFERENCE PLACEHOLDER STATE */
+                      <div className="p-6 rounded-xl border border-dashed border-zinc-800 bg-zinc-950/30 text-center space-y-4 flex flex-col justify-center items-center py-10">
+                        <div className="w-12 h-12 rounded-full bg-zinc-900/80 border border-zinc-800 flex items-center justify-center text-zinc-550 shadow-inner">
+                          <Image size={22} className="text-emerald-500" />
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-bold text-zinc-200 uppercase tracking-wider">Tidak ada referensi visual</p>
+                          <p className="text-[10px] text-zinc-500 leading-relaxed max-w-[240px]">
+                            Gunakan kamera untuk mengambil foto halaman kitab asli Anda, atau unggah file gambar lokal naskah agar dapat mendayagunakan contekan visual interaktif di panel editor ini.
+                          </p>
+                        </div>
+
+                        <div className="flex flex-col gap-2 w-full pt-2">
+                          <button
+                            onClick={() => setIsCameraActive(true)}
+                            className="w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] rounded flex items-center justify-center gap-1.5 hover:scale-[1.02] active:scale-[0.98] transition shadow cursor-pointer"
+                          >
+                            <Camera size={13} />
+                            <span>Buka Kamera Hub</span>
+                          </button>
+                          
+                          <button
+                            onClick={() => visualRefLoaderRef.current?.click()}
+                            className="w-full py-1.5 bg-[#141414] hover:bg-[#1f1f1f] border border-zinc-800 text-zinc-400 font-bold text-[10.5px] rounded flex items-center justify-center gap-1.5 transition cursor-pointer"
+                          >
+                            <Upload size={12} />
+                            <span>Unggah Referensi Berkas</span>
+                          </button>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            ref={visualRefLoaderRef}
+                            onChange={handleImageUpload}
+                            className="hidden"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </motion.aside>
           )}
@@ -3760,6 +4726,247 @@ export default function App() {
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Dynamic PDF Reader & Parser Modal Dialog */}
+      {showPdfModal && (
+        <div className="absolute inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 z-40 transition-all duration-300">
+          <div className="bg-[#121212] border border-zinc-800 rounded-xl shadow-2xl w-full max-w-6xl h-[90vh] md:h-[85vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            {/* Modal Header */}
+            <div className="px-6 py-4 bg-zinc-950 border-b border-zinc-900 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-red-500/10 border border-red-500/30 flex items-center justify-center text-red-400">
+                  <FileText size={16} />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-zinc-150 uppercase tracking-wide">Penafsir & Pendeteksi Naskah PDF</h3>
+                  <p className="text-[10px] text-zinc-500">Membaca isi kitab PDF kepingan, mengidentifikasi teks Arab, dan memetakannya otomatis</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowPdfModal(false)}
+                className="text-zinc-550 hover:text-zinc-300 p-1.5 hover:bg-zinc-900 rounded-lg transition-colors cursor-pointer"
+                title="Tutup dialog"
+              >
+                <X size={15} />
+              </button>
+            </div>
+
+            {/* Modal Body Grid */}
+            <div className="flex-1 flex flex-col md:flex-row min-h-0 overflow-hidden bg-zinc-950/20">
+              {/* Left Column: Import Settings */}
+              <div className="w-full md:w-[350px] bg-[#161616] p-5 border-b md:border-b-0 md:border-r border-zinc-900 overflow-y-auto shrink-0 space-y-5 flex flex-col text-xs text-zinc-300">
+                <div className="space-y-1.5">
+                  <span className="text-[10px] text-zinc-500 uppercase tracking-wider font-bold">Struktur Bab Impor</span>
+                  <div className="space-y-3.5 bg-zinc-900/40 p-3.5 rounded-lg border border-zinc-850/60 mt-1">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-zinc-400 mb-1">Target Bab:</label>
+                      <select
+                        value={pdfTargetChapterId}
+                        onChange={(e) => setPdfTargetChapterId(e.target.value)}
+                        className="w-full bg-[#0d0d0d] border border-zinc-800 rounded px-2.5 py-1.5 text-zinc-200 font-medium focus:border-red-500 text-xs cursor-pointer"
+                      >
+                        <option value="new">+ Buat Bab Baru</option>
+                        {project.chapters.map(ch => (
+                          <option key={ch.id} value={ch.id}>{ch.title}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {pdfTargetChapterId === "new" && (
+                      <div className="space-y-3 animate-in fade-in duration-200">
+                        <div>
+                          <label className="block text-[11px] font-semibold text-zinc-400 mb-1">Nama Bab Baru:</label>
+                          <input
+                            type="text"
+                            value={pdfNewChapterTitle}
+                            onChange={(e) => setPdfNewChapterTitle(e.target.value)}
+                            placeholder="Contoh: Bab Bersuci (Thaharah)"
+                            className="w-full bg-[#0d0d0d] border border-zinc-800 rounded px-2.5 py-1.5 text-zinc-200 font-medium focus:border-red-500 text-xs focus:outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-semibold text-zinc-400 mb-1">Kategori Jenis:</label>
+                          <select
+                            value={pdfNewChapterCategory}
+                            onChange={(e) => setPdfNewChapterCategory(e.target.value)}
+                            className="w-full bg-[#0d0d0d] border border-zinc-800 rounded px-2.5 py-1.5 text-zinc-200 font-medium focus:border-red-500 text-xs cursor-pointer"
+                          >
+                            <option value="Umum">Umum</option>
+                            <option value="Nahwu">Nahwu</option>
+                            <option value="Shorof">Shorof</option>
+                            <option value="Fiqh">Fiqh</option>
+                            <option value="Tasawwuf">Tasawwuf</option>
+                            <option value="Tauhid">Tauhid</option>
+                            <option value="Hadits">Hadits</option>
+                            <option value="Tafsir">Tafsir</option>
+                          </select>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <span className="text-[10px] text-zinc-500 uppercase tracking-wider font-bold">Model Penyelaras Baris</span>
+                  <div className="space-y-3 bg-zinc-900/40 p-3.5 rounded-lg border border-zinc-850/60 mt-1">
+                    <label className="flex items-start gap-2 cursor-pointer pb-2 border-b border-zinc-850/40">
+                      <input
+                        type="radio"
+                        name="pdfPairMode"
+                        checked={pdfPairingMode === "smart"}
+                        onChange={() => handleRecalculatePdfRows("smart")}
+                        className="mt-0.5 accent-red-500 text-red-500"
+                      />
+                      <div>
+                        <p className="font-bold text-zinc-250">Sandingkan Arab-Latin Otomatis</p>
+                        <p className="text-[10px] text-zinc-500 mt-0.5 leading-relaxed">Sistem mendeteksi tulisan Arab dan memasangkannya dengan kalimat terjemah di bawahnya jadi satu baris tunggal.</p>
+                      </div>
+                    </label>
+
+                    <label className="flex items-start gap-2 cursor-pointer pt-2">
+                      <input
+                        type="radio"
+                        name="pdfPairMode"
+                        checked={pdfPairingMode === "separate"}
+                        onChange={() => handleRecalculatePdfRows("separate")}
+                        className="mt-0.5 accent-red-500 text-red-500"
+                      />
+                      <div>
+                        <p className="font-bold text-zinc-250">Impor Baris Terpisah</p>
+                        <p className="text-[10px] text-zinc-500 mt-0.5 leading-relaxed">Impor setiap baris tulisan terdeteksi secara utuh terpisah satu-satu.</p>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+
+                <div className="bg-red-950/20 rounded-lg p-3 text-red-400 space-y-1 border border-red-900/10 leading-relaxed text-[10px] mt-auto">
+                  <p className="font-bold uppercase tracking-wider text-[10px]">Tinjauan Aturan Saku:</p>
+                  <p>Anda dapat mencentang/menghapus baris yang akan diimpor, atau mengoreksi lafadz & makna secara langsung dari kolom pratinjau sebelum tombol diterapkan.</p>
+                </div>
+              </div>
+
+              {/* Right Column: Previews Grid */}
+              <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+                <div className="px-5 py-3 bg-zinc-900/40 border-b border-zinc-900 shrink-0 flex items-center justify-between text-xs text-zinc-300">
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-bold text-zinc-150 uppercase tracking-wide">Tabel Hasil Penyandingan ({pdfParsedRows.length} baris)</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setPdfParsedRows(prev => prev.map(r => ({ ...r, isSelected: true })))}
+                      className="text-[10px] hover:text-zinc-200 transition bg-zinc-800 text-zinc-400 px-2 py-1 rounded cursor-pointer"
+                    >
+                      Pilih Semua
+                    </button>
+                    <button
+                      onClick={() => setPdfParsedRows(prev => prev.map(r => ({ ...r, isSelected: false })))}
+                      className="text-[10px] hover:text-zinc-200 transition bg-zinc-800 text-zinc-400 px-2 py-1 rounded cursor-pointer"
+                    >
+                      Bersihkan
+                    </button>
+                  </div>
+                </div>
+
+                {/* Grid List */}
+                <div className="flex-1 overflow-y-auto p-4 space-y-2.5">
+                  {pdfParsedRows.length === 0 ? (
+                    <div className="h-full flex items-center justify-center text-zinc-500 text-xs italic">
+                      Teks belum diekstrak atau kosong.
+                    </div>
+                  ) : (
+                    pdfParsedRows.map((row, rIdx) => (
+                      <div
+                        key={row.id}
+                        className={`flex gap-3 p-3 rounded-lg border transition-all ${
+                          row.isSelected
+                            ? "bg-[#18181b]/50 border-zinc-800"
+                            : "bg-[#18181b]/10 border-zinc-950 opacity-40"
+                        }`}
+                      >
+                        {/* Checkbox and Index */}
+                        <div className="flex flex-col items-center justify-start pt-1.5 shrink-0 select-none">
+                          <input
+                            type="checkbox"
+                            checked={row.isSelected}
+                            onChange={() => {
+                              setPdfParsedRows(prev => prev.map(r => r.id === row.id ? { ...r, isSelected: !r.isSelected } : r));
+                            }}
+                            className="accent-rose-500 scale-105 cursor-pointer"
+                          />
+                          <span className="text-[9px] text-zinc-650 mt-2 font-mono">#{rIdx + 1}</span>
+                        </div>
+
+                        {/* Editing fields */}
+                        <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-3.5">
+                          {/* Arabic Input */}
+                          <div className="space-y-1">
+                            <span className="text-[10px] text-emerald-500 font-bold uppercase tracking-wider block font-mono">Lafadz Arab:</span>
+                            <textarea
+                              value={row.arabic}
+                              dir="rtl"
+                              onChange={(e) => {
+                                const v = e.target.value;
+                                setPdfParsedRows(prev => prev.map(r => r.id === row.id ? { ...r, arabic: v } : r));
+                              }}
+                              className="w-full bg-[#121212] border border-zinc-800/80 text-emerald-400 font-serif text-lg p-2.5 rounded focus:outline-none focus:border-emerald-600 leading-normal"
+                              rows={2}
+                            />
+                          </div>
+
+                          {/* Translation Input */}
+                          <div className="space-y-1">
+                            <span className="text-[10px] text-rose-450 font-bold uppercase tracking-wider block font-mono">Makna / Terjemah:</span>
+                            <textarea
+                              value={row.translation}
+                              onChange={(e) => {
+                                const v = e.target.value;
+                                setPdfParsedRows(prev => prev.map(r => r.id === row.id ? { ...r, translation: v } : r));
+                              }}
+                              className="w-full bg-[#121212] border border-zinc-800/80 text-zinc-300 text-xs p-2.5 rounded focus:outline-none focus:border-rose-800 leading-relaxed"
+                              rows={2}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Actions Footer */}
+            <div className="px-6 py-4 bg-zinc-950 border-t border-zinc-900 flex justify-between items-center shrink-0">
+              <span className="text-[10px] text-zinc-500 italic">Sistem membagi lafadz menjadi perkakas kata individual otomatis agar transliterasi bekerja seketika.</span>
+              <div className="flex gap-2.5">
+                <button
+                  onClick={() => setShowPdfModal(false)}
+                  className="px-4 py-2 border border-zinc-800 hover:bg-zinc-900 text-zinc-400 hover:text-zinc-200 rounded-lg text-xs font-semibold transition cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  onClick={handleApplyPdfImport}
+                  className="px-5 py-2 bg-[#8c1d1d] hover:bg-[#a12323] text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-md shadow-[#4a0e0e]/20 transition cursor-pointer"
+                >
+                  <Check size={13} />
+                  <span>Selesaikan Impor PDF</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* pdfLoading Backdrop */}
+      {pdfLoading && (
+        <div className="absolute inset-0 bg-[#000000]/80 backdrop-blur-xs flex flex-col items-center justify-center gap-3.5 z-50">
+          <div className="w-10 h-10 rounded-full border-4 border-[#3a1515] border-t-red-500 animate-spin"></div>
+          <div className="text-center space-y-1">
+            <p className="text-sm text-zinc-200 font-bold tracking-wide">Pendeteksi Auto-Baca PDF kepingan</p>
+            <p className="text-xs text-zinc-500 animate-pulse">{pdfParsingStatus}</p>
           </div>
         </div>
       )}

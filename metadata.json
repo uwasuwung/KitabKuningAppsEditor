@@ -1,6 +1,6 @@
 {
   "name": "Kitab Kuning Editor",
   "description": "A comprehensive RTL-supporting Arabic text editor and translation tool designed for writing and annotating classical Islamic scriptures (Kitab Kuning) with Jenggot Pegon/Indonesian sublinear makna, customizable keyboard shortcuts, diacritics insertion, and offline-compatible dictionary support.",
-  "requestFramePermissions": [],
+  "requestFramePermissions": ["camera"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

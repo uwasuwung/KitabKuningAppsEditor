@@ -34,6 +34,7 @@ export interface KitabChapter {
   title: string;
   sections: KitabSection[];
   order: number;
+  category?: string;
 }
 
 export interface KitabProject {
