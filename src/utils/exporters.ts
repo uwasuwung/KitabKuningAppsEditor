@@ -1,0 +1,675 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.5
+ */
+
+import {
+  Document,
+  Packer,
+  Paragraph,
+  TextRun,
+  AlignmentType,
+  HeadingLevel,
+  Table,
+  TableRow,
+  TableCell,
+  WidthType,
+  BorderStyle
+} from "docx";
+
+import { KitabProject } from "../types";
+
+export interface ExportOptions {
+  scope: "all" | "current";
+  currentChapterId?: string;
+  showMakna: boolean;
+  showSymbols: boolean;
+  showTranslation: boolean;
+  showNotes: boolean;
+}
+
+/**
+ * Exports either the current chapter or the entire project to a well-formatted PDF file.
+ * To achieve flawless RTL, complex Arabic character shaping, and perfect alignment of
+ * sublinear "makna jenggot" text, this function utilizes the browser's native print engine
+ * by creating a high-fidelity print template inside a temporary iframe.
+ */
+export function exportToPdf(project: KitabProject, options: ExportOptions): void {
+  // Determine chapters to export
+  const chapters = options.scope === "current" && options.currentChapterId
+    ? project.chapters.filter(ch => ch.id === options.currentChapterId)
+    : project.chapters;
+
+  if (chapters.length === 0) {
+    throw new Error("Tidak ada bab yang dapat diekspor.");
+  }
+
+  // Create an iframe to hold the printable content
+  const printIframe = document.createElement("iframe");
+  printIframe.style.position = "absolute";
+  printIframe.style.width = "0px";
+  printIframe.style.height = "0px";
+  printIframe.style.border = "none";
+  printIframe.style.left = "-2000px";
+  printIframe.style.top = "-2000px";
+  document.body.appendChild(printIframe);
+
+  const iframeDoc = printIframe.contentWindow?.document || printIframe.contentDocument;
+  if (!iframeDoc) {
+    throw new Error("Gagal menginisialisasi modul cetak dokumen.");
+  }
+
+  const htmlContent = `
+    <!DOCTYPE html>
+    <html lang="ar" dir="rtl">
+    <head>
+      <meta charset="utf-8">
+      <title>${project.title}</title>
+      <link rel="preconnect" href="https://fonts.googleapis.com">
+      <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+      <link href="https://fonts.googleapis.com/css2?family=Amiri:ital,wght@0,400;0,700;1,400;1,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+      <style>
+        body {
+          font-family: 'Inter', system-ui, -apple-system, sans-serif;
+          background-color: #ffffff;
+          color: #0c0a09;
+          line-height: 1.6;
+          padding: 30px;
+          direction: rtl;
+        }
+        
+        /* Layout container */
+        .container {
+          max-width: 850px;
+          margin: 0 auto;
+        }
+
+        /* Front title page or top banner */
+        .header-container {
+          text-align: center;
+          margin-bottom: 50px;
+          border-bottom: 3px double #059669;
+          padding-bottom: 25px;
+          direction: ltr; /* keep meta aligned naturally or styled nicely */
+        }
+        .header-container h1 {
+          font-family: 'Amiri', serif;
+          font-size: 34px;
+          font-weight: bold;
+          color: #065f46;
+          margin: 0 0 12px 0;
+          direction: rtl;
+        }
+        .header-container .author {
+          font-size: 16px;
+          color: #374151;
+          font-weight: 600;
+          margin-bottom: 8px;
+        }
+        .header-container .description {
+          font-size: 13.5px;
+          color: #6b7280;
+          max-width: 600px;
+          margin: 0 auto;
+          line-height: 1.5;
+        }
+
+        /* Chapter block */
+        .chapter-container {
+          margin-top: 50px;
+          page-break-before: always;
+        }
+        .chapter-container:first-of-type {
+          page-break-before: avoid;
+        }
+        .chapter-title {
+          font-family: 'Amiri', serif;
+          font-size: 26px;
+          font-weight: bold;
+          color: #1e3a8a;
+          text-align: center;
+          border-bottom: 2px solid #3b82f6;
+          padding-bottom: 10px;
+          margin-bottom: 30px;
+          break-after: avoid;
+        }
+
+        /* Section block */
+        .section-container {
+          margin-top: 35px;
+        }
+        .section-title {
+          font-family: 'Inter', sans-serif;
+          font-size: 18px;
+          font-weight: 700;
+          color: #111827;
+          border-right: 5px solid #10b981;
+          padding-right: 12px;
+          margin-bottom: 20px;
+          text-align: right;
+          break-after: avoid;
+        }
+
+        /* Line card / container */
+        .line-card {
+          margin-bottom: 28px;
+          border: 1px solid #e5e7eb;
+          border-radius: 8px;
+          padding: 20px;
+          background-color: #f9fafb;
+          break-inside: avoid;
+        }
+
+        /* Arabic phrase with sublinear jenggot annotations */
+        .arabic-row {
+          display: flex;
+          flex-wrap: wrap;
+          justify-content: flex-start;
+          gap: 16px 24px;
+          direction: rtl;
+          line-height: 2.8;
+          margin-bottom: 16px;
+          text-align: right;
+        }
+        .word-cell {
+          display: inline-flex;
+          flex-direction: column;
+          align-items: center;
+          min-width: 50px;
+        }
+        .arabic-text {
+          font-family: 'Amiri', serif;
+          font-size: 28px;
+          font-weight: bold;
+          color: #000000;
+          direction: rtl;
+          line-height: 1.25;
+        }
+        .jenggot-text {
+          font-size: 11.5px;
+          color: #4b5563;
+          text-align: center;
+          margin-top: 5px;
+          max-width: 120px;
+          white-space: normal;
+          line-height: 1.2;
+          font-family: 'Inter', system-ui, sans-serif;
+          font-style: italic;
+        }
+        .symbol-tag {
+          font-family: 'Amiri', serif;
+          font-size: 11px;
+          background-color: #ecfdf5;
+          color: #047857;
+          border: 1px solid #a7f3d0;
+          border-radius: 4px;
+          padding: 0 5.5px;
+          font-weight: bold;
+          line-height: 1.1;
+          margin-top: 3px;
+        }
+
+        /* Full explanations / translation blocks */
+        .translation-block {
+          background-color: #f1f5f9;
+          border-left: 4.5px solid #10b981;
+          border-radius: 4px;
+          padding: 12px 16px;
+          font-size: 14px;
+          color: #1f2937;
+          direction: ltr;
+          text-align: left;
+          margin-top: 14px;
+          font-family: 'Inter', system-ui, sans-serif;
+        }
+        .notes-block {
+          font-size: 12.5px;
+          color: #4b5563;
+          margin-top: 10px;
+          direction: ltr;
+          text-align: left;
+          padding-left: 16px;
+          border-left: 2px dashed #9ca3af;
+          font-family: 'Inter', system-ui, sans-serif;
+        }
+
+        /* Printing elements stylesheet rules */
+        @media print {
+          @page {
+            size: A4;
+            margin: 15mm;
+          }
+          body {
+            background-color: #ffffff !important;
+            color: #000000 !important;
+            padding: 0px;
+          }
+          .line-card {
+            border: 1px solid #d1d5db;
+            background-color: #ffffff;
+            break-inside: avoid;
+            box-shadow: none !important;
+          }
+          .translation-block {
+            background-color: #f3f4f6;
+            border-left: 4px solid #10b981;
+          }
+          .footer-print {
+            display: block !important;
+          }
+        }
+
+        .footer-print {
+          display: none;
+          text-align: center;
+          font-size: 10px;
+          color: #6b7280;
+          margin-top: 40px;
+          border-top: 1px solid #e5e7eb;
+          padding-top: 15px;
+          direction: ltr;
+          font-family: 'Inter', sans-serif;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header-container">
+          <h1>${project.title}</h1>
+          ${project.author ? `<div class="author">Karya: ${project.author}</div>` : ""}
+          ${project.description ? `<div class="description">${project.description}</div>` : ""}
+        </div>
+
+        ${chapters.map(ch => `
+          <div class="chapter-container">
+            <h2 class="chapter-title">${ch.title}</h2>
+            ${ch.sections.map(sec => `
+              <div class="section-container">
+                <h3 class="section-title">${sec.title}</h3>
+                ${sec.lines.map(line => {
+                  const hasWords = line.words && line.words.length > 0;
+                  return `
+                    <div class="line-card">
+                      <div class="arabic-row">
+                        ${hasWords && options.showMakna
+                          ? line.words.map(w => `
+                              <div class="word-cell">
+                                <span class="arabic-text">${w.arabic}</span>
+                                ${options.showSymbols && w.symbol ? `<span class="symbol-tag">${w.symbol}</span>` : ""}
+                                <span class="jenggot-text">${w.makna || ""}</span>
+                              </div>
+                            `).join("")
+                          : `<div class="word-cell" style="width: 100%; text-align: right;">
+                              <span class="arabic-text" style="font-size: 26px;">${line.arabicFull}</span>
+                             </div>`
+                        }
+                      </div>
+
+                      ${options.showTranslation && line.translationFull ? `
+                        <div class="translation-block">
+                          <strong>Terjemah:</strong> ${line.translationFull}
+                        </div>
+                      ` : ""}
+
+                      ${options.showNotes && line.notes ? `
+                        <div class="notes-block">
+                          <strong>Keterangan:</strong> ${line.notes}
+                        </div>
+                      ` : ""}
+                    </div>
+                  `;
+                }).join("")}
+              </div>
+            `).join("")}
+          </div>
+        `).join("")}
+
+        <div class="footer-print">
+          Diekspor secara otomatis melalui Kitab Scribe Pro — ${new Date().toLocaleDateString('id-ID')}
+        </div>
+      </div>
+
+      <script>
+        // Trigger system printing once typography files are fetched
+        document.fonts.ready.then(() => {
+          setTimeout(() => {
+            window.print();
+          }, 600);
+        });
+      </script>
+    </body>
+    </html>
+  `;
+
+  iframeDoc.open();
+  iframeDoc.write(htmlContent);
+  iframeDoc.close();
+
+  // Clean-up iframe afterward
+  setTimeout(() => {
+    if (document.body.contains(printIframe)) {
+      document.body.removeChild(printIframe);
+    }
+  }, 15000);
+}
+
+/**
+ * Exports either the current chapter or the entire project to an editable DOCX file.
+ * Formats chapters, sections, and builds a dedicated sublinear RTL table grid
+ * mapping Arabic words and its associated pesantren definitions neatly in Microsoft Word!
+ */
+export async function exportToDocx(project: KitabProject, options: ExportOptions): Promise<void> {
+  const chapters = options.scope === "current" && options.currentChapterId
+    ? project.chapters.filter(ch => ch.id === options.currentChapterId)
+    : project.chapters;
+
+  if (chapters.length === 0) {
+    throw new Error("Tidak ada bab yang dapat diekspor.");
+  }
+
+  const docElements: (Paragraph | Table)[] = [];
+
+  // 1. Cover / Title Section
+  docElements.push(
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { before: 200, after: 120 },
+      children: [
+        new TextRun({
+          text: project.title,
+          bold: true,
+          size: 36, // 18pt
+          color: "065f46" // emerald green
+        })
+      ]
+    })
+  );
+
+  if (project.author) {
+    docElements.push(
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { after: 120 },
+        children: [
+          new TextRun({
+            text: `Karya: ${project.author}`,
+            italics: true,
+            size: 24, // 12pt
+            color: "374151"
+          })
+        ]
+      })
+    );
+  }
+
+  if (project.description) {
+    docElements.push(
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { after: 600 },
+        children: [
+          new TextRun({
+            text: project.description,
+            size: 20, // 10pt
+            color: "6b7280"
+          })
+        ]
+      })
+    );
+  }
+
+  // Divider Line
+  docElements.push(
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 400 },
+      border: {
+        bottom: {
+          color: "e5e7eb",
+          space: 1,
+          style: BorderStyle.SINGLE,
+          size: 15
+        }
+      }
+    })
+  );
+
+  // 2. Chapters Loop
+  for (const ch of chapters) {
+    docElements.push(
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { before: 400, after: 250 },
+        heading: HeadingLevel.HEADING_1,
+        keepNext: true,
+        children: [
+          new TextRun({
+            text: ch.title,
+            bold: true,
+            size: 28, // 14pt
+            color: "1e3a8a", // navy blue
+            font: "Amiri"
+          })
+        ]
+      })
+    );
+
+    // Sections
+    for (const sec of ch.sections) {
+      docElements.push(
+        new Paragraph({
+          alignment: AlignmentType.RIGHT,
+          spacing: { before: 300, after: 150 },
+          heading: HeadingLevel.HEADING_2,
+          keepNext: true,
+          children: [
+            new TextRun({
+              text: sec.title,
+              bold: true,
+              size: 24, // 12pt
+              color: "111827"
+            })
+          ]
+        })
+      );
+
+      // Lines
+      for (const line of sec.lines) {
+        const hasWords = line.words && line.words.length > 0;
+
+        if (hasWords && options.showMakna) {
+          // Build Word-by-word columns inside an RTL Ribbon Table
+          // Each word is a column cell in a single row
+          // MS Word renders these right-to-left beautifully if bidiVisual is enabled on table
+          const cells: TableCell[] = line.words.map(w => {
+            const cellChildren: Paragraph[] = [];
+
+            // Row 1: Arabic word (RTL)
+            cellChildren.push(
+              new Paragraph({
+                alignment: AlignmentType.CENTER,
+                spacing: { before: 60, after: 30 },
+                bidirectional: true,
+                children: [
+                  new TextRun({
+                    text: w.arabic,
+                    bold: true,
+                    size: 26, // 13pt
+                    font: "Amiri",
+                    color: "000000"
+                  })
+                ]
+              })
+            );
+
+            // Row 2: Symbol (Small Nahwu grammar tag)
+            if (options.showSymbols && w.symbol) {
+              cellChildren.push(
+                new Paragraph({
+                  alignment: AlignmentType.CENTER,
+                  spacing: { after: 30 },
+                  children: [
+                    new TextRun({
+                      text: `[${w.symbol}]`,
+                      bold: true,
+                      size: 16, // 8pt
+                      color: "047857",
+                      font: "Amiri"
+                    })
+                  ]
+                })
+              );
+            }
+
+            // Row 3: Makna Jenggot (Sublinear)
+            cellChildren.push(
+              new Paragraph({
+                alignment: AlignmentType.CENTER,
+                spacing: { after: 60 },
+                children: [
+                  new TextRun({
+                    text: w.makna || "-",
+                    italics: true,
+                    size: 18, // 9pt
+                    color: "4b5563"
+                  })
+                ]
+              })
+            );
+
+            return new TableCell({
+              children: cellChildren,
+              width: {
+                size: 2000,
+                type: WidthType.DXA
+              },
+              shading: {
+                fill: "f9fafb"
+              },
+              borders: {
+                top: { style: BorderStyle.SINGLE, size: 4, color: "e5e7eb" },
+                bottom: { style: BorderStyle.SINGLE, size: 4, color: "e5e7eb" },
+                left: { style: BorderStyle.SINGLE, size: 4, color: "e5e7eb" },
+                right: { style: BorderStyle.SINGLE, size: 4, color: "e5e7eb" }
+              }
+            });
+          });
+
+          // Create the single-row layout table
+          const bidiTable = new Table({
+            alignment: AlignmentType.RIGHT,
+            rows: [
+              new TableRow({
+                children: cells
+              })
+            ]
+          });
+
+          docElements.push(bidiTable);
+          // Spacing below the table
+          docElements.push(
+            new Paragraph({
+              spacing: { before: 100, after: 100 },
+              children: []
+            })
+          );
+        } else {
+          // If no words array or showMakna is disabled, export raw full Arabic phrase
+          docElements.push(
+            new Paragraph({
+              alignment: AlignmentType.RIGHT,
+              spacing: { before: 150, after: 150 },
+              bidirectional: true,
+              children: [
+                new TextRun({
+                  text: line.arabicFull,
+                  bold: true,
+                  size: 28, // 14pt
+                  font: "Amiri",
+                  color: "000000"
+                })
+              ]
+            })
+          );
+        }
+
+        // Full Translation Block (Under Arabic Word block)
+        if (options.showTranslation && line.translationFull) {
+          docElements.push(
+            new Paragraph({
+              alignment: AlignmentType.LEFT,
+              spacing: { after: 80 },
+              indent: { left: 400 },
+              children: [
+                new TextRun({
+                  text: "Terjemah: ",
+                  bold: true,
+                  size: 20,
+                  color: "10b981"
+                }),
+                new TextRun({
+                  text: line.translationFull,
+                  size: 20, // 10pt
+                  color: "1f2937"
+                })
+              ]
+            })
+          );
+        }
+
+        // Notes Block
+        if (options.showNotes && line.notes) {
+          docElements.push(
+            new Paragraph({
+              alignment: AlignmentType.LEFT,
+              spacing: { after: 200 },
+              indent: { left: 600 },
+              children: [
+                new TextRun({
+                  text: "Keterangan: ",
+                  bold: true,
+                  size: 18,
+                  color: "4b5563"
+                }),
+                new TextRun({
+                  text: line.notes,
+                  size: 18, // 9pt
+                  color: "4b5563",
+                  italics: true
+                })
+              ]
+            })
+          );
+        }
+
+        // Line-break separator spacing
+        docElements.push(
+          new Paragraph({
+            spacing: { after: 200 },
+            children: []
+          })
+        );
+      }
+    }
+  }
+
+  // 3. Assemble and Download DOCX Document
+  const doc = new Document({
+    sections: [
+      {
+        properties: {},
+        children: docElements
+      }
+    ]
+  });
+
+  const blob = await Packer.toBlob(doc);
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${project.title.replace(/\s+/g, '_')}_buku_makna.docx`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}

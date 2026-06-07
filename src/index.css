@@ -1,0 +1,8 @@
+@import "tailwindcss";
+
+@theme {
+  --font-serif: "Amiri", "Scheherazade New", Georgia, ui-serif, serif;
+  --font-amiri: "Amiri", serif;
+  --font-scheherazade: "Scheherazade New", serif;
+}
+
