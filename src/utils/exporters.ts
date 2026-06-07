@@ -26,6 +26,11 @@ export interface ExportOptions {
   showSymbols: boolean;
   showTranslation: boolean;
   showNotes: boolean;
+  showMatan?: boolean;
+  showSyarah?: boolean;
+  showHasyiyah?: boolean;
+  showTaliq?: boolean;
+  styleKitabKuning?: boolean;
 }
 
 /**
@@ -59,6 +64,12 @@ export function exportToPdf(project: KitabProject, options: ExportOptions): void
     throw new Error("Gagal menginisialisasi modul cetak dokumen.");
   }
 
+  const showMatan = options.showMatan !== false;
+  const showSyarah = options.showSyarah !== false;
+  const showHasyiyah = options.showHasyiyah !== false;
+  const showTaliq = options.showTaliq !== false;
+  const useKitabKuningStyle = options.styleKitabKuning !== false;
+
   const htmlContent = `
     <!DOCTYPE html>
     <html lang="ar" dir="rtl">
@@ -67,7 +78,7 @@ export function exportToPdf(project: KitabProject, options: ExportOptions): void
       <title>${project.title}</title>
       <link rel="preconnect" href="https://fonts.googleapis.com">
       <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-      <link href="https://fonts.googleapis.com/css2?family=Amiri:ital,wght@0,400;0,700;1,400;1,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+      <link href="https://fonts.googleapis.com/css2?family=Amiri:ital,wght@0,400;0,700;1,400;1,700&family=Inter:wght@400;500;600;700&family=Scheherazade+New:wght@400;700&display=swap" rel="stylesheet">
       <style>
         body {
           font-family: 'Inter', system-ui, -apple-system, sans-serif;
@@ -76,6 +87,40 @@ export function exportToPdf(project: KitabProject, options: ExportOptions): void
           line-height: 1.6;
           padding: 30px;
           direction: rtl;
+        }
+
+        /* Traditional Kitab Kuning Theme styling */
+        .kitab-kuning-theme {
+          background-color: #faf4e6 !important;
+          color: #3d2414 !important;
+        }
+        
+        .kitab-kuning-theme .line-card {
+          background-color: #fcf9f2 !important;
+          border: 1px solid #c49662 !important;
+          border-radius: 8px;
+          box-shadow: 0 4px 12px rgba(139, 90, 43, 0.05);
+          padding: 24px;
+        }
+
+        .kitab-kuning-theme .header-container {
+          border-bottom: 3px double #a8733e !important;
+        }
+
+        .kitab-kuning-theme .header-container h1 {
+          color: #7c441c !important;
+          font-family: 'Scheherazade New', 'Amiri', serif !important;
+        }
+
+        .kitab-kuning-theme .chapter-title {
+          color: #7c441c !important;
+          border-bottom: 2px double #c49662 !important;
+          font-family: 'Scheherazade New', 'Amiri', serif !important;
+        }
+
+        .kitab-kuning-theme .section-title {
+          color: #522f16 !important;
+          border-right: 5px solid #a8733e !important;
         }
         
         /* Layout container */
@@ -176,15 +221,29 @@ export function exportToPdf(project: KitabProject, options: ExportOptions): void
           flex-direction: column;
           align-items: center;
           min-width: 50px;
+          transition: all 0.2s;
         }
+        
+        .kitab-kuning-theme .word-cell {
+          background-color: #fdfbf7;
+          border: 1px solid #eed8bf;
+          border-radius: 6px;
+          padding: 4px 8px;
+        }
+
         .arabic-text {
-          font-family: 'Amiri', serif;
-          font-size: 28px;
+          font-family: 'Scheherazade New', 'Amiri', serif;
+          font-size: 30px;
           font-weight: bold;
           color: #000000;
           direction: rtl;
           line-height: 1.25;
         }
+        
+        .kitab-kuning-theme .arabic-text {
+          color: #2b180d !important;
+        }
+
         .jenggot-text {
           font-size: 11.5px;
           color: #4b5563;
@@ -196,6 +255,11 @@ export function exportToPdf(project: KitabProject, options: ExportOptions): void
           font-family: 'Inter', system-ui, sans-serif;
           font-style: italic;
         }
+        
+        .kitab-kuning-theme .jenggot-text {
+          color: #5c3c26 !important;
+        }
+
         .symbol-tag {
           font-family: 'Amiri', serif;
           font-size: 11px;
@@ -207,6 +271,160 @@ export function exportToPdf(project: KitabProject, options: ExportOptions): void
           font-weight: bold;
           line-height: 1.1;
           margin-top: 3px;
+        }
+
+        .kitab-kuning-theme .symbol-tag {
+          background-color: #fbf5e6;
+          color: #8c4f2b;
+          border: 1px solid #e2c098;
+        }
+
+        /* Scholastic Badge Styles */
+        .layer-badge {
+          display: inline-block;
+          font-size: 8.5px;
+          letter-spacing: 0.05em;
+          font-weight: 800;
+          padding: 2px 6px;
+          border-radius: 4px;
+          line-height: normal;
+          margin-bottom: 6px;
+          font-family: 'Inter', sans-serif;
+        }
+
+        .matan-badge {
+          background-color: #ffe4e6;
+          color: #9f1239;
+          border: 1px solid #fecdd3;
+        }
+
+        .syarah-badge {
+          background-color: #dcfce7;
+          color: #166534;
+          border: 1px solid #bbf7d0;
+        }
+
+        .hasyiyah-badge {
+          background-color: #ede9fe;
+          color: #5b21b6;
+          border: 1px solid #ddd6fe;
+        }
+
+        .taliq-badge {
+          background-color: #fef3c7;
+          color: #92400e;
+          border: 1px solid #fde68a;
+        }
+
+        /* Kitab Kuning Theme Scholastic Badges OVERRIDES */
+        .kitab-kuning-theme .matan-badge {
+          background-color: #f5e3ca !important;
+          color: #7c2d12 !important;
+          border: 1px solid #e7c595 !important;
+        }
+
+        .kitab-kuning-theme .syarah-badge {
+          background-color: #ecf3e6 !important;
+          color: #224d1a !important;
+          border: 1px solid #cbdcb8 !important;
+        }
+
+        .kitab-kuning-theme .hasyiyah-badge {
+          background-color: #eae6f3 !important;
+          color: #3b1e6e !important;
+          border: 1px solid #c9bde4 !important;
+        }
+
+        .kitab-kuning-theme .taliq-badge {
+          background-color: #f7eded !important;
+          color: #822222 !important;
+          border: 1px solid #eababa !important;
+        }
+
+        /* Layers Formatting */
+        .layer-matan {
+          border: 1px solid #fda4af;
+          background-color: #fff1f2;
+          border-radius: 6px;
+          padding: 12px;
+          margin-top: 14px;
+          direction: rtl;
+          text-align: right;
+        }
+
+        .kitab-kuning-theme .layer-matan {
+          border: 1px solid #e7bd8c !important;
+          background-color: #fcf9f2 !important;
+        }
+
+        .arabic-text-serif {
+          font-family: 'Scheherazade New', 'Amiri', serif;
+          font-size: 24px;
+          font-weight: bold;
+          line-height: 1.8;
+          display: block;
+          color: #9f1239;
+        }
+
+        .kitab-kuning-theme .arabic-text-serif {
+          color: #7c2d12 !important;
+        }
+
+        .layer-syarah {
+          border-right: 4px solid #10b981;
+          background-color: #f0fdf4;
+          border-radius: 0 6px 6px 0;
+          padding: 12px;
+          margin-top: 10px;
+          text-align: left;
+          direction: ltr;
+        }
+
+        .kitab-kuning-theme .layer-syarah {
+          border-right: 4px solid #9e6f3b !important;
+          background-color: #fbf9f4 !important;
+        }
+
+        .layer-hasyiyah {
+          border-right: 4px solid #8b5cf6;
+          background-color: #f5f3ff;
+          border-radius: 0 6px 6px 0;
+          padding: 12px;
+          margin-top: 10px;
+          text-align: left;
+          direction: ltr;
+        }
+
+        .kitab-kuning-theme .layer-hasyiyah {
+          border-right: 4px solid #7c51a5 !important;
+          background-color: #f8f6f0 !important;
+        }
+
+        .layer-taliq {
+          border-right: 4px solid #f59e0b;
+          background-color: #fffbeb;
+          border-radius: 0 6px 6px 0;
+          padding: 10px 12px;
+          margin-top: 10px;
+          text-align: left;
+          direction: ltr;
+        }
+
+        .kitab-kuning-theme .layer-taliq {
+          border-right: 4px solid #b85b30 !important;
+          background-color: #faf6ed !important;
+        }
+
+        .commentary-text {
+          font-family: 'Inter', system-ui, sans-serif;
+          font-size: 13px;
+          line-height: 1.6;
+          margin: 0;
+          color: #374151;
+        }
+
+        .kitab-kuning-theme .commentary-text {
+          color: #4a2f1b !important;
         }
 
         /* Full explanations / translation blocks */
@@ -222,6 +440,13 @@ export function exportToPdf(project: KitabProject, options: ExportOptions): void
           margin-top: 14px;
           font-family: 'Inter', system-ui, sans-serif;
         }
+        
+        .kitab-kuning-theme .translation-block {
+          background-color: #f7f3e8 !important;
+          border-left: 4.5px solid #a3754c !important;
+          color: #4a2f1b !important;
+        }
+
         .notes-block {
           font-size: 12.5px;
           color: #4b5563;
@@ -231,6 +456,11 @@ export function exportToPdf(project: KitabProject, options: ExportOptions): void
           padding-left: 16px;
           border-left: 2px dashed #9ca3af;
           font-family: 'Inter', system-ui, sans-serif;
+        }
+        
+        .kitab-kuning-theme .notes-block {
+          color: #5c412e !important;
+          border-left: 2px dashed #a3754c !important;
         }
 
         /* Printing elements stylesheet rules */
@@ -243,17 +473,37 @@ export function exportToPdf(project: KitabProject, options: ExportOptions): void
             background-color: #ffffff !important;
             color: #000000 !important;
             padding: 0px;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
           }
+          
+          .kitab-kuning-theme {
+            background-color: #faf4e6 !important;
+            color: #3d2414 !important;
+          }
+          
           .line-card {
             border: 1px solid #d1d5db;
             background-color: #ffffff;
             break-inside: avoid;
             box-shadow: none !important;
           }
+
+          .kitab-kuning-theme .line-card {
+            background-color: #fcf9f2 !important;
+            border: 1px solid #c49662 !important;
+          }
+
           .translation-block {
             background-color: #f3f4f6;
             border-left: 4px solid #10b981;
           }
+
+          .kitab-kuning-theme .translation-block {
+            background-color: #f7f3e8 !important;
+            border-left: 4.5px solid #a3754c !important;
+          }
+
           .footer-print {
             display: block !important;
           }
@@ -270,9 +520,14 @@ export function exportToPdf(project: KitabProject, options: ExportOptions): void
           direction: ltr;
           font-family: 'Inter', sans-serif;
         }
+        
+        .kitab-kuning-theme .footer-print {
+          color: #8c5d37 !important;
+          border-top: 1px solid #eddcc6 !important;
+        }
       </style>
     </head>
-    <body>
+    <body class="${useKitabKuningStyle ? 'kitab-kuning-theme' : ''}">
       <div class="container">
         <div class="header-container">
           <h1>${project.title}</h1>
@@ -300,7 +555,7 @@ export function exportToPdf(project: KitabProject, options: ExportOptions): void
                               </div>
                             `).join("")
                           : `<div class="word-cell" style="width: 100%; text-align: right;">
-                              <span class="arabic-text" style="font-size: 26px;">${line.arabicFull}</span>
+                              <span class="arabic-text" style="font-size: 28px;">${line.arabicFull}</span>
                              </div>`
                         }
                       </div>
@@ -311,9 +566,31 @@ export function exportToPdf(project: KitabProject, options: ExportOptions): void
                         </div>
                       ` : ""}
 
-                      ${options.showNotes && line.notes ? `
-                        <div class="notes-block">
-                          <strong>Keterangan:</strong> ${line.notes}
+                      ${showMatan && line.matan ? `
+                        <div class="layer-matan">
+                          <span class="layer-badge matan-badge">MATAN</span>
+                          <span class="arabic-text-serif" dir="rtl">${line.matan}</span>
+                        </div>
+                      ` : ""}
+
+                      ${showSyarah && (line.syarah || line.notes) ? `
+                        <div class="layer-syarah">
+                          <span class="layer-badge syarah-badge">SYARAH</span>
+                          <p class="commentary-text">${line.syarah || line.notes}</p>
+                        </div>
+                      ` : ""}
+
+                      ${showHasyiyah && line.hasyiyah ? `
+                        <div class="layer-hasyiyah">
+                          <span class="layer-badge hasyiyah-badge">HASYIYAH</span>
+                          <p class="commentary-text">${line.hasyiyah}</p>
+                        </div>
+                      ` : ""}
+
+                      ${showTaliq && line.taliq ? `
+                        <div class="layer-taliq">
+                          <span class="layer-badge taliq-badge">TA'LIQ</span>
+                          <p class="commentary-text">${line.taliq}</p>
                         </div>
                       ` : ""}
                     </div>
@@ -617,25 +894,107 @@ export async function exportToDocx(project: KitabProject, options: ExportOptions
           );
         }
 
-        // Notes Block
-        if (options.showNotes && line.notes) {
+        // Traditional scholastic commentary layers (Matan, Syarah, Hasyiyah, Ta'liq) in Word Format
+        const showMatan = options.showMatan !== false;
+        const showSyarah = options.showSyarah !== false;
+        const showHasyiyah = options.showHasyiyah !== false;
+        const showTaliq = options.showTaliq !== false;
+
+        // 1. Matan Block
+        if (showMatan && line.matan) {
+          docElements.push(
+            new Paragraph({
+              alignment: AlignmentType.RIGHT,
+              spacing: { before: 100, after: 100 },
+              bidirectional: true,
+              indent: { right: 400 },
+              children: [
+                new TextRun({
+                  text: "[MATAN] ",
+                  bold: true,
+                  size: 18,
+                  color: "9f1239"
+                }),
+                new TextRun({
+                  text: line.matan,
+                  bold: true,
+                  size: 22,
+                  font: "Amiri",
+                  color: "9f1239"
+                })
+              ]
+            })
+          );
+        }
+
+        // 2. Syarah Block
+        if (showSyarah && (line.syarah || line.notes)) {
           docElements.push(
             new Paragraph({
               alignment: AlignmentType.LEFT,
-              spacing: { after: 200 },
+              spacing: { before: 60, after: 100 },
+              indent: { left: 400 },
+              children: [
+                new TextRun({
+                  text: "Syarah: ",
+                  bold: true,
+                  size: 18,
+                  color: "166534"
+                }),
+                new TextRun({
+                  text: line.syarah || line.notes || "",
+                  size: 18,
+                  color: "1f2937"
+                })
+              ]
+            })
+          );
+        }
+
+        // 3. Hasyiyah Block
+        if (showHasyiyah && line.hasyiyah) {
+          docElements.push(
+            new Paragraph({
+              alignment: AlignmentType.LEFT,
+              spacing: { before: 60, after: 100 },
               indent: { left: 600 },
               children: [
                 new TextRun({
-                  text: "Keterangan: ",
+                  text: "Hasyiyah: ",
                   bold: true,
                   size: 18,
-                  color: "4b5563"
+                  color: "5b21b6"
                 }),
                 new TextRun({
-                  text: line.notes,
-                  size: 18, // 9pt
-                  color: "4b5563",
-                  italics: true
+                  text: line.hasyiyah,
+                  size: 18,
+                  italics: true,
+                  color: "4b5563"
+                })
+              ]
+            })
+          );
+        }
+
+        // 4. Ta'liq Block
+        if (showTaliq && line.taliq) {
+          docElements.push(
+            new Paragraph({
+              alignment: AlignmentType.LEFT,
+              spacing: { before: 60, after: 100 },
+              indent: { left: 800 },
+              children: [
+                new TextRun({
+                  text: "Ta'liq: ",
+                  bold: true,
+                  size: 16,
+                  color: "92400e"
+                }),
+                new TextRun({
+                  text: line.taliq,
+                  size: 16,
+                  italics: true,
+                  color: "4b5563"
                 })
               ]
             })

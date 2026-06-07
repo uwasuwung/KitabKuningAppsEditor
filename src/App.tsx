@@ -29,8 +29,14 @@ import {
   HelpCircle,
   Hash,
   Download,
-  Info
+  Info,
+  PanelLeftClose,
+  PanelLeftOpen,
+  PanelRightClose,
+  PanelRightOpen
 } from "lucide-react";
+
+import { motion, AnimatePresence } from "motion/react";
 
 import {
   KitabProject,
@@ -48,6 +54,34 @@ import { defaultTransliterationRules } from "./data/transliterationRules";
 import { stripDiacritics, transliterateText, insertTextAtCursor } from "./utils/arabic";
 import { exportToPdf, exportToDocx } from "./utils/exporters";
 import ToolbarArabic from "./components/ToolbarArabic";
+
+const QUICK_IRAB_MAP: { [key: string]: { char: string; name: string; desc: string } } = {
+  "m": { char: "م", name: "Mubtada'", desc: "Subjek kalimat / Utawi (المبتدأ)" },
+  "kh": { char: "خ", name: "Khabar", desc: "Predikat kalimat / Iku (الخبر)" },
+  "k": { char: "خ", name: "Khabar", desc: "Predikat kalimat / Iku (الخبر)" },
+  "f": { char: "ف", name: "Fa'il", desc: "Pelaku / Sopo (الفاعل)" },
+  "o": { char: "مف", name: "Maf'ul Bih", desc: "Objek penderita / Ing (مفعول به)" },
+  "maf": { char: "مف", name: "Maf'ul Bih", desc: "Objek penderita / Ing (مفعول به)" },
+  "n": { char: "نع", name: "Na'at", desc: "Sifat / Kang (النعت)" },
+  "na": { char: "نع", name: "Na'at", desc: "Sifat / Kang (النعت)" },
+  "j": { char: "جر", name: "Jar", desc: "Komponen Majrur / Kelawan (الجر)" },
+  "jr": { char: "جر", name: "Jar", desc: "Komponen Majrur / Kelawan (الجر)" },
+  "h": { char: "حال", name: "Hal", desc: "Keterangan Keadaan / Hale (الحال)" },
+  "hal": { char: "حال", name: "Hal", desc: "Keterangan Keadaan / Hale (الحال)" },
+  "t": { char: "ت", name: "Tamyiz", desc: "Spesifikasi / Apane (التمييز)" },
+  "tam": { char: "ت", name: "Tamyiz", desc: "Spesifikasi / Apane (التمييز)" },
+  "g": { char: "مض", name: "Mudhaf", desc: "Sandangan Kepemilikan (المضاف)" },
+  "md": { char: "مض", name: "Mudhaf", desc: "Sandangan Kepemilikan (المضاف)" },
+  "nb": { char: "نب", name: "Naib Fa'il", desc: "Pelaku Pasif / Sopo (نائب الفاعل)" },
+  "sh": { char: "صل", name: "Shilah", desc: "Shilah Maushul / Rupane (الصلة)" },
+  "jw": { char: "جو", name: "Jawab", desc: "Jawab Syarat / Moko (الجواب)" },
+  "mm": { char: "مم", name: "Maf'ul Mutlaq", desc: "Pengeras / Kelawan (مفعول مطلق)" },
+  "ml": { char: "مل", name: "Maf'ul Li-ajlih", desc: "Alasan / Karono (مفعول لأجله)" },
+  "ik": { char: "اك", name: "Isim Kana", desc: "Isim milik Kana (اسم كان)" },
+  "kk": { char: "كك", name: "Khabar Kana", desc: "Khabar milik Kana (خبر كان)" },
+  "ii": { char: "اان", name: "Isim Inna", desc: "Isim milik Inna (اسم إن)" },
+  "ki": { char: "كن", name: "Khabar Inna", desc: "Khabar milik Inna (خبر إن)" }
+};
 
 export default function App() {
   // --- Persistent & In-memory States ---
@@ -96,6 +130,7 @@ export default function App() {
   const [kitabSearch, setKitabSearch] = useState<string>("");
 
   // --- Sidebar & Panel Toggle ---
+  const [showLeftSidebar, setShowLeftSidebar] = useState<boolean>(true);
   const [showRightSidebar, setShowRightSidebar] = useState<boolean>(true);
   const [showPreferences, setShowPreferences] = useState<boolean>(false);
   const [splitViewMode, setSplitViewMode] = useState<boolean>(false);
@@ -119,6 +154,12 @@ export default function App() {
   const [exportShowSymbols, setExportShowSymbols] = useState<boolean>(true);
   const [exportShowTranslation, setExportShowTranslation] = useState<boolean>(true);
   const [exportShowNotes, setExportShowNotes] = useState<boolean>(true);
+  const [exportShowMatan, setExportShowMatan] = useState<boolean>(true);
+  const [exportShowSyarah, setExportShowSyarah] = useState<boolean>(true);
+  const [exportShowHasyiyah, setExportShowHasyiyah] = useState<boolean>(true);
+  const [exportShowTaliq, setExportShowTaliq] = useState<boolean>(true);
+  const [exportStyleKitabKuning, setExportStyleKitabKuning] = useState<boolean>(true);
+  const [exportMobileTab, setExportMobileTab] = useState<"options" | "preview">("options");
 
   const [newChapterTitle, setNewChapterTitle] = useState<string>("");
   const [newSectionTitle, setNewSectionTitle] = useState<string>("");
@@ -138,6 +179,7 @@ export default function App() {
   const [wordArabic, setWordArabic] = useState<string>("");
   const [wordMakna, setWordMakna] = useState<string>("");
   const [wordSymbol, setWordSymbol] = useState<string>("");
+  const [isQuickInputMode, setIsQuickInputMode] = useState<boolean>(true);
 
   // --- Dictionary Form state ---
   const [newKamusKeyword, setNewKamusKeyword] = useState<string>("");
@@ -809,7 +851,12 @@ export default function App() {
           showMakna: exportShowMakna,
           showSymbols: exportShowSymbols,
           showTranslation: exportShowTranslation,
-          showNotes: exportShowNotes
+          showNotes: exportShowNotes,
+          showMatan: exportShowMatan,
+          showSyarah: exportShowSyarah,
+          showHasyiyah: exportShowHasyiyah,
+          showTaliq: exportShowTaliq,
+          styleKitabKuning: exportStyleKitabKuning
         });
         showNotif("Modul cetak PDF berhasil diinisialisasi!", "success");
       } else if (exportFormat === "docx") {
@@ -820,7 +867,12 @@ export default function App() {
           showMakna: exportShowMakna,
           showSymbols: exportShowSymbols,
           showTranslation: exportShowTranslation,
-          showNotes: exportShowNotes
+          showNotes: exportShowNotes,
+          showMatan: exportShowMatan,
+          showSyarah: exportShowSyarah,
+          showHasyiyah: exportShowHasyiyah,
+          showTaliq: exportShowTaliq,
+          styleKitabKuning: exportStyleKitabKuning
         })
           .then(() => {
             showNotif("Word dokumen (.docx) berhasil diunduh!", "success");
@@ -848,32 +900,257 @@ export default function App() {
       return;
     }
 
+    const showMatan = exportShowMatan !== false;
+    const showSyarah = exportShowSyarah !== false;
+    const showHasyiyah = exportShowHasyiyah !== false;
+    const showTaliq = exportShowTaliq !== false;
+    const useKitabKuningStyle = exportStyleKitabKuning !== false;
+
     const htmlContent = `
       <!DOCTYPE html>
       <html lang="ar" dir="rtl">
       <head>
         <meta charset="utf-8">
         <title>${project.title}</title>
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=Amiri:ital,wght@0,400;0,700;1,400;1,700&family=Inter:wght@400;500;600;700&family=Scheherazade+New:wght@400;700&display=swap" rel="stylesheet">
         <style>
-          body { font-family: 'Amiri', 'Traditional Arabic', serif; background: #fff; color: #111; padding: 40px; }
+          body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            background-color: #ffffff;
+            color: #0c0a09;
+            line-height: 1.6;
+            padding: 40px;
+            direction: rtl;
+          }
+
+          /* Traditional Kitab Kuning Theme styling */
+          .kitab-kuning-theme {
+            background-color: #faf4e6 !important;
+            color: #3d2414 !important;
+          }
+          
+          .kitab-kuning-theme .line {
+            background-color: #fcf9f2 !important;
+            border: 1px solid #c49662 !important;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(139, 90, 43, 0.05);
+            padding: 24px;
+          }
+
+          .kitab-kuning-theme h1 {
+            color: #7c441c !important;
+            border-bottom: 3px double #a8733e !important;
+          }
+
+          .kitab-kuning-theme .chapter-title {
+            color: #7c441c !important;
+            border-bottom: 2px double #c49662 !important;
+            font-family: 'Scheherazade New', 'Amiri', serif !important;
+          }
+
+          .kitab-kuning-theme .section-title {
+            color: #522f16 !important;
+            border-right: 5px solid #a8733e !important;
+          }
+
           .container { max-width: 900px; margin: 0 auto; direction: rtl; text-align: right; }
-          h1 { text-align: center; color: #15803d; border-bottom: 2px solid #15803d; padding-bottom: 15px; }
+          h1 { text-align: center; color: #15803d; border-bottom: 2px solid #15803d; padding-bottom: 15px; font-family: 'Amiri', serif; }
           .meta { text-align: center; color: #666; font-style: italic; margin-bottom: 40px; font-family: sans-serif; }
           .chapter { margin-top: 50px; border-bottom: 1px dashed #ccc; padding-bottom: 30px; }
-          .chapter-title { color: #1e3a8a; text-align: center; font-size: 28px; }
+          .chapter-title { color: #1e3a8a; text-align: center; font-size: 28px; font-family: 'Amiri', serif; }
           .section { margin: 30px 0; }
-          .section-title { color: #0f172a; font-size: 22px; border-right: 4px solid #16a34a; padding-right: 12px; }
-          .line { margin: 35px 0; background: #fafafa; padding: 20px; border-radius: 8px; border: 1px solid #eee; }
-          .arabic-container { display: flex; flex-wrap: wrap; justify-content: flex-start; gap: 15px; margin-bottom: 15px; line-height: 2; }
-          .word-block { display: inline-flex; flex-direction: column; align-items: center; }
-          .arabic-word { font-size: 26px; font-weight: bold; color: #000; }
-          .makna-jenggot { font-size: 11px; color: #555; text-align: center; font-family: sans-serif; margin-top: 2px; }
-          .symbol-badge { background: #dcfce7; color: #166534; font-size: 10px; font-family: monospace; padding: 1px 4px; border-radius: 3px; font-weight: bold; }
-          .translation-full { font-size: 14px; color: #374151; font-family: sans-serif; direction: ltr; text-align: left; background: #f1f5f9; padding: 10px; border-left: 3px solid #10b981; margin-top: 10px; border-radius: 4px; }
-          .notes-box { font-size: 13px; color: #6b7280; font-family: sans-serif; margin-top: 5px; direction: ltr; text-align: left; padding-left: 10px; }
+          .section-title { color: #0f172a; font-size: 20px; border-right: 4px solid #16a34a; padding-right: 12px; font-family: sans-serif; }
+          .line { margin: 35px 0; background: #fafafa; padding: 22px; border-radius: 8px; border: 1px solid #eee; break-inside: avoid; }
+          .arabic-container { display: flex; flex-wrap: wrap; justify-content: flex-start; gap: 15px; margin-bottom: 15px; line-height: 2.8; }
+          
+          .word-block { display: inline-flex; flex-direction: column; align-items: center; min-width: 50px; }
+          .kitab-kuning-theme .word-block {
+            background-color: #fdfbf7;
+            border: 1px solid #eed8bf;
+            border-radius: 6px;
+            padding: 4px 8px;
+          }
+
+          .arabic-word { font-family: 'Scheherazade New', 'Amiri', serif; font-size: 28px; font-weight: bold; color: #000; }
+          .kitab-kuning-theme .arabic-word { color: #2b180d !important; }
+
+          .makna-jenggot { font-size: 11px; color: #555; text-align: center; font-family: sans-serif; margin-top: 2px; font-style: italic; }
+          .kitab-kuning-theme .makna-jenggot { color: #5c3c26 !important; }
+
+          .symbol-badge { background: #dcfce7; color: #166534; font-size: 10px; font-family: monospace; padding: 1px 4px; border-radius: 3px; font-weight: bold; margin-top: 1px; }
+          .kitab-kuning-theme .symbol-badge { background-color: #fbf5e6; color: #8c4f2b; border: 1px solid #e2c098; }
+
+          /* Scholastic Badge Styles */
+          .layer-badge {
+            display: inline-block;
+            font-size: 8.5px;
+            letter-spacing: 0.05em;
+            font-weight: 800;
+            padding: 2px 6px;
+            border-radius: 4px;
+            line-height: normal;
+            margin-bottom: 6px;
+            font-family: 'Inter', sans-serif;
+          }
+
+          .matan-badge {
+            background-color: #ffe4e6;
+            color: #9f1239;
+            border: 1px solid #fecdd3;
+          }
+
+          .syarah-badge {
+            background-color: #dcfce7;
+            color: #166534;
+            border: 1px solid #bbf7d0;
+          }
+
+          .hasyiyah-badge {
+            background-color: #ede9fe;
+            color: #5b21b6;
+            border: 1px solid #ddd6fe;
+          }
+
+          .taliq-badge {
+            background-color: #fef3c7;
+            color: #92400e;
+            border: 1px solid #fde68a;
+          }
+
+          /* Kitab Kuning Theme Scholastic Badges OVERRIDES */
+          .kitab-kuning-theme .matan-badge {
+            background-color: #f5e3ca !important;
+            color: #7c2d12 !important;
+            border: 1px solid #e7c595 !important;
+          }
+
+          .kitab-kuning-theme .syarah-badge {
+            background-color: #ecf3e6 !important;
+            color: #224d1a !important;
+            border: 1px solid #cbdcb8 !important;
+          }
+
+          .kitab-kuning-theme .hasyiyah-badge {
+            background-color: #eae6f3 !important;
+            color: #3b1e6e !important;
+            border: 1px solid #c9bde4 !important;
+          }
+
+          .kitab-kuning-theme .taliq-badge {
+            background-color: #f7eded !important;
+            color: #822222 !important;
+            border: 1px solid #eababa !important;
+          }
+
+          /* Layers Formatting */
+          .layer-matan {
+            border: 1px solid #fda4af;
+            background-color: #fff1f2;
+            border-radius: 6px;
+            padding: 12px;
+            margin-top: 14px;
+            direction: rtl;
+            text-align: right;
+          }
+
+          .kitab-kuning-theme .layer-matan {
+            border: 1px solid #e7bd8c !important;
+            background-color: #fcf9f2 !important;
+          }
+
+          .arabic-text-serif {
+            font-family: 'Scheherazade New', 'Amiri', serif;
+            font-size: 24px;
+            font-weight: bold;
+            line-height: 1.8;
+            display: block;
+            color: #9f1239;
+          }
+
+          .kitab-kuning-theme .arabic-text-serif {
+            color: #7c2d12 !important;
+          }
+
+          .layer-syarah {
+            border-right: 4px solid #10b981;
+            background-color: #f0fdf4;
+            border-radius: 0 6px 6px 0;
+            padding: 12px;
+            margin-top: 10px;
+            text-align: left;
+            direction: ltr;
+          }
+
+          .kitab-kuning-theme .layer-syarah {
+            border-right: 4px solid #9e6f3b !important;
+            background-color: #fbf9f4 !important;
+          }
+
+          .layer-hasyiyah {
+            border-right: 4px solid #8b5cf6;
+            background-color: #f5f3ff;
+            border-radius: 0 6px 6px 0;
+            padding: 12px;
+            margin-top: 10px;
+            text-align: left;
+            direction: ltr;
+          }
+
+          .kitab-kuning-theme .layer-hasyiyah {
+            border-right: 4px solid #7c51a5 !important;
+            background-color: #f8f6f0 !important;
+          }
+
+          .layer-taliq {
+            border-right: 4px solid #f59e0b;
+            background-color: #fffbeb;
+            border-radius: 0 6px 6px 0;
+            padding: 10px 12px;
+            margin-top: 10px;
+            text-align: left;
+            direction: ltr;
+          }
+
+          .kitab-kuning-theme .layer-taliq {
+            border-right: 4px solid #b85b30 !important;
+            background-color: #faf6ed !important;
+          }
+
+          .commentary-text {
+            font-family: 'Inter', system-ui, sans-serif;
+            font-size: 13px;
+            line-height: 1.6;
+            margin: 0;
+            color: #374151;
+          }
+
+          .kitab-kuning-theme .commentary-text {
+            color: #4a2f1b !important;
+          }
+
+          .translation-full {
+            font-size: 14px;
+            color: #374151;
+            font-family: sans-serif;
+            direction: ltr;
+            text-align: left;
+            background: #f1f5f9;
+            padding: 10px;
+            border-left: 3.5px solid #10b981;
+            margin-top: 14px;
+            border-radius: 4px;
+          }
+          
+          .kitab-kuning-theme .translation-full {
+            background-color: #f7f3e8 !important;
+            border-left: 4.5px solid #a3754c !important;
+            color: #4a2f1b !important;
+          }
         </style>
       </head>
-      <body>
+      <body class="${useKitabKuningStyle ? 'kitab-kuning-theme' : ''}">
         <div class="container">
           <h1>${project.title}</h1>
           <div class="meta">Oleh: ${project.author} <br/> ${project.description}</div>
@@ -895,11 +1172,43 @@ export default function App() {
                               <span class="makna-jenggot">${w.makna || ""}</span>
                             </div>
                           `).join("") 
-                          : `<span style="font-size: 24px; font-weight: bold;">${line.arabicFull}</span>`
+                          : `<span style="font-size: 26px; font-weight: bold; font-family: 'Scheherazade New', 'Amiri', serif;">${line.arabicFull}</span>`
                         }
                       </div>
-                      ${(exportShowTranslation && line.translationFull) ? `<div class="translation-full"><strong>Makna:</strong> ${line.translationFull}</div>` : ""}
-                      ${(exportShowNotes && line.notes) ? `<div class="notes-box"><strong>Keterangan:</strong> ${line.notes}</div>` : ""}
+
+                      ${(exportShowTranslation && line.translationFull) ? `
+                        <div class="translation-full">
+                          <strong>Makna:</strong> ${line.translationFull}
+                        </div>
+                      ` : ""}
+
+                      ${showMatan && line.matan ? `
+                        <div class="layer-matan">
+                          <span class="layer-badge matan-badge">MATAN</span>
+                          <span class="arabic-text-serif" dir="rtl">${line.matan}</span>
+                        </div>
+                      ` : ""}
+
+                      ${showSyarah && (line.syarah || line.notes) ? `
+                        <div class="layer-syarah">
+                          <span class="layer-badge syarah-badge">SYARAH</span>
+                          <p class="commentary-text">${line.syarah || line.notes}</p>
+                        </div>
+                      ` : ""}
+
+                      ${showHasyiyah && line.hasyiyah ? `
+                        <div class="layer-hasyiyah">
+                          <span class="layer-badge hasyiyah-badge">HASYIYAH</span>
+                          <p class="commentary-text">${line.hasyiyah}</p>
+                        </div>
+                      ` : ""}
+
+                      ${showTaliq && line.taliq ? `
+                        <div class="layer-taliq">
+                          <span class="layer-badge taliq-badge">TA'LIQ</span>
+                          <p class="commentary-text">${line.taliq}</p>
+                        </div>
+                      ` : ""}
                     </div>
                   `).join("")}
                 </div>
@@ -920,6 +1229,332 @@ export default function App() {
     downloadAnchor.click();
     downloadAnchor.remove();
     showNotif("Ekspor dokumen HTML telah berhasil diunduh!", "success");
+  }
+
+  function generatePreviewHtml(): string {
+    const chaptersToExport = exportScope === "all"
+      ? project.chapters
+      : project.chapters.filter(ch => ch.id === activeChapterId);
+
+    const showMatan = exportShowMatan !== false;
+    const showSyarah = exportShowSyarah !== false;
+    const showHasyiyah = exportShowHasyiyah !== false;
+    const showTaliq = exportShowTaliq !== false;
+    const useKitabKuningStyle = exportStyleKitabKuning !== false;
+
+    return `
+      <!DOCTYPE html>
+      <html lang="ar" dir="rtl">
+      <head>
+        <meta charset="utf-8">
+        <title>${project.title}</title>
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=Amiri:ital,wght@0,400;0,700;1,400;1,700&family=Inter:wght@400;500;600;700&family=Scheherazade+New:wght@400;700&display=swap" rel="stylesheet">
+        <style>
+          body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            background-color: #ffffff;
+            color: #0c0a09;
+            line-height: 1.6;
+            padding: 24.5px;
+            direction: rtl;
+          }
+
+          /* Traditional Kitab Kuning Theme styling */
+          .kitab-kuning-theme {
+            background-color: #faf4e6 !important;
+            color: #3d2414 !important;
+          }
+          
+          .kitab-kuning-theme .line {
+            background-color: #fcf9f2 !important;
+            border: 1px solid #c49662 !important;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(139, 90, 43, 0.05);
+            padding: 20px;
+          }
+
+          .kitab-kuning-theme h1 {
+            color: #7c441c !important;
+            border-bottom: 3px double #a8733e !important;
+          }
+
+          .kitab-kuning-theme .chapter-title {
+            color: #7c441c !important;
+            border-bottom: 2px double #c49662 !important;
+            font-family: 'Scheherazade New', 'Amiri', serif !important;
+          }
+
+          .kitab-kuning-theme .section-title {
+            color: #522f16 !important;
+            border-right: 5px solid #a8733e !important;
+          }
+
+          .container { max-width: 900px; margin: 0 auto; direction: rtl; text-align: right; }
+          h1 { text-align: center; color: #15803d; border-bottom: 2px solid #15803d; padding-bottom: 15px; font-family: 'Amiri', serif; margin-top: 10px; }
+          .meta { text-align: center; color: #666; font-style: italic; margin-bottom: 30px; font-family: sans-serif; }
+          .chapter { margin-top: 30px; border-bottom: 1px dashed #ccc; padding-bottom: 20px; }
+          .chapter-title { color: #1e3a8a; text-align: center; font-size: 24px; font-family: 'Amiri', serif; }
+          .section { margin: 20px 0; }
+          .section-title { color: #0f172a; font-size: 18px; border-right: 4px solid #16a34a; padding-right: 12px; font-family: sans-serif; }
+          .line { margin: 25px 0; background: #fafafa; padding: 18px; border-radius: 8px; border: 1px solid #eee; break-inside: avoid; }
+          .arabic-container { display: flex; flex-wrap: wrap; justify-content: flex-start; gap: 12px; margin-bottom: 12px; line-height: 2.6; }
+          
+          .word-block { display: inline-flex; flex-direction: column; align-items: center; min-width: 44px; }
+          .kitab-kuning-theme .word-block {
+            background-color: #fdfbf7;
+            border: 1px solid #eed8bf;
+            border-radius: 6px;
+            padding: 4px 6px;
+          }
+
+          .arabic-word { font-family: 'Scheherazade New', 'Amiri', serif; font-size: 26px; font-weight: bold; color: #000; }
+          .kitab-kuning-theme .arabic-word { color: #2b180d !important; }
+
+          .makna-jenggot { font-size: 11px; color: #555; text-align: center; font-family: sans-serif; margin-top: 2px; font-style: italic; }
+          .kitab-kuning-theme .makna-jenggot { color: #5c3c26 !important; }
+
+          .symbol-badge { background: #dcfce7; color: #166534; font-size: 10px; font-family: monospace; padding: 1px 4px; border-radius: 3px; font-weight: bold; margin-top: 1px; }
+          .kitab-kuning-theme .symbol-badge { background-color: #fbf5e6; color: #8c4f2b; border: 1px solid #e2c098; }
+
+          /* Scholastic Badge Styles */
+          .layer-badge {
+            display: inline-block;
+            font-size: 8.5px;
+            letter-spacing: 0.05em;
+            font-weight: 800;
+            padding: 2px 6px;
+            border-radius: 4px;
+            line-height: normal;
+            margin-bottom: 6px;
+            font-family: 'Inter', sans-serif;
+          }
+
+          .matan-badge {
+            background-color: #ffe4e6;
+            color: #9f1239;
+            border: 1px solid #fecdd3;
+          }
+
+          .syarah-badge {
+            background-color: #dcfce7;
+            color: #166534;
+            border: 1px solid #bbf7d0;
+          }
+
+          .hasyiyah-badge {
+            background-color: #ede9fe;
+            color: #5b21b6;
+            border: 1px solid #ddd6fe;
+          }
+
+          .taliq-badge {
+            background-color: #fef3c7;
+            color: #92400e;
+            border: 1px solid #fde68a;
+          }
+
+          /* Kitab Kuning Theme Scholastic Badges OVERRIDES */
+          .kitab-kuning-theme .matan-badge {
+            background-color: #f5e3ca !important;
+            color: #7c2d12 !important;
+            border: 1px solid #e7c595 !important;
+          }
+
+          .kitab-kuning-theme .syarah-badge {
+            background-color: #ecf3e6 !important;
+            color: #224d1a !important;
+            border: 1px solid #cbdcb8 !important;
+          }
+
+          .kitab-kuning-theme .hasyiyah-badge {
+            background-color: #eae6f3 !important;
+            color: #3b1e6e !important;
+            border: 1px solid #c9bde4 !important;
+          }
+
+          .kitab-kuning-theme .taliq-badge {
+            background-color: #f7eded !important;
+            color: #822222 !important;
+            border: 1px solid #eababa !important;
+          }
+
+          /* Layers Formatting */
+          .layer-matan {
+            border: 1px solid #fda4af;
+            background-color: #fff1f2;
+            border-radius: 6px;
+            padding: 10px;
+            margin-top: 10px;
+            direction: rtl;
+            text-align: right;
+          }
+
+          .kitab-kuning-theme .layer-matan {
+            border: 1px solid #e7bd8c !important;
+            background-color: #fcf9f2 !important;
+          }
+
+          .arabic-text-serif {
+            font-family: 'Scheherazade New', 'Amiri', serif;
+            font-size: 22px;
+            font-weight: bold;
+            line-height: 1.8;
+            display: block;
+            color: #9f1239;
+          }
+
+          .kitab-kuning-theme .arabic-text-serif {
+            color: #7c2d12 !important;
+          }
+
+          .layer-syarah {
+            border-right: 4px solid #10b981;
+            background-color: #f0fdf4;
+            border-radius: 0 6px 6px 0;
+            padding: 10px;
+            margin-top: 8px;
+            text-align: left;
+            direction: ltr;
+          }
+
+          .kitab-kuning-theme .layer-syarah {
+            border-right: 4px solid #9e6f3b !important;
+            background-color: #fbf9f4 !important;
+          }
+
+          .layer-hasyiyah {
+            border-right: 4px solid #8b5cf6;
+            background-color: #f5f3ff;
+            border-radius: 0 6px 6px 0;
+            padding: 10px;
+            margin-top: 8px;
+            text-align: left;
+            direction: ltr;
+          }
+
+          .kitab-kuning-theme .layer-hasyiyah {
+            border-right: 4px solid #7c51a5 !important;
+            background-color: #f8f6f0 !important;
+          }
+
+          .layer-taliq {
+            border-right: 4px solid #f59e0b;
+            background-color: #fffbeb;
+            border-radius: 0 6px 6px 0;
+            padding: 8px 10px;
+            margin-top: 8px;
+            text-align: left;
+            direction: ltr;
+          }
+
+          .kitab-kuning-theme .layer-taliq {
+            border-right: 4px solid #b85b30 !important;
+            background-color: #faf6ed !important;
+          }
+
+          .commentary-text {
+            font-family: 'Inter', system-ui, sans-serif;
+            font-size: 12px;
+            line-height: 1.5;
+            margin: 0;
+            color: #374151;
+          }
+
+          .kitab-kuning-theme .commentary-text {
+            color: #4a2f1b !important;
+          }
+
+          .translation-full {
+            font-size: 13px;
+            color: #374151;
+            font-family: sans-serif;
+            direction: ltr;
+            text-align: left;
+            background: #f1f5f9;
+            padding: 8px;
+            border-left: 3.5px solid #10b981;
+            margin-top: 10px;
+            border-radius: 4px;
+          }
+          
+          .kitab-kuning-theme .translation-full {
+            background-color: #f7f3e8 !important;
+            border-left: 4.5px solid #a3754c !important;
+            color: #4a2f1b !important;
+          }
+        </style>
+      </head>
+      <body class="${useKitabKuningStyle ? 'kitab-kuning-theme' : ''}">
+        <div class="container">
+          <h1>${project.title}</h1>
+          <div class="meta">Oleh: ${project.author}</div>
+          
+          ${chaptersToExport.map(ch => `
+            <div class="chapter">
+              <h2 class="chapter-title">${ch.title}</h2>
+              ${ch.sections.map(sec => `
+                <div class="section">
+                  <h3 class="section-title">${sec.title}</h3>
+                  ${sec.lines.map(line => `
+                    <div class="line">
+                      <div class="arabic-container">
+                        ${(line.words && line.words.length > 0 && exportShowMakna) ? 
+                          line.words.map(w => `
+                            <div class="word-block">
+                              <span class="arabic-word">${w.arabic}</span>
+                              ${(exportShowSymbols && w.symbol) ? `<span class="symbol-badge">${w.symbol}</span>` : ""}
+                              <span class="makna-jenggot">${w.makna || ""}</span>
+                            </div>
+                          `).join("") 
+                          : `<span style="font-size: 24px; font-weight: bold; font-family: 'Scheherazade New', 'Amiri', serif;">${line.arabicFull}</span>`
+                        }
+                      </div>
+
+                      ${(exportShowTranslation && line.translationFull) ? `
+                        <div class="translation-full">
+                          <strong>Makna:</strong> ${line.translationFull}
+                        </div>
+                      ` : ""}
+
+                      ${showMatan && line.matan ? `
+                        <div class="layer-matan">
+                          <span class="layer-badge matan-badge">MATAN</span>
+                          <span class="arabic-text-serif" dir="rtl">${line.matan}</span>
+                        </div>
+                      ` : ""}
+
+                      ${showSyarah && (line.syarah || line.notes) ? `
+                        <div class="layer-syarah">
+                          <span class="layer-badge syarah-badge">SYARAH</span>
+                          <p class="commentary-text">${line.syarah || line.notes}</p>
+                        </div>
+                      ` : ""}
+
+                      ${showHasyiyah && line.hasyiyah ? `
+                        <div class="layer-hasyiyah">
+                          <span class="layer-badge hasyiyah-badge">HASYIYAH</span>
+                          <p class="commentary-text">${line.hasyiyah}</p>
+                        </div>
+                      ` : ""}
+
+                      ${showTaliq && line.taliq ? `
+                        <div class="layer-taliq">
+                          <span class="layer-badge taliq-badge">TA'LIQ</span>
+                          <p class="commentary-text">${line.taliq}</p>
+                        </div>
+                      ` : ""}
+                    </div>
+                  `).join("")}
+                </div>
+              `).join("")}
+            </div>
+          `).join("")}
+        </div>
+      </body>
+      </html>
+    `;
   }
 
   // --- Search computation ---
@@ -1077,6 +1712,23 @@ export default function App() {
 
         {/* Global actions: Save button & Preferences */}
         <div className="flex items-center gap-3">
+          <div className="flex bg-zinc-900 border border-zinc-800 rounded p-0.5 gap-0.5">
+            <button
+              onClick={() => setShowLeftSidebar(!showLeftSidebar)}
+              className={`p-1.5 rounded transition cursor-pointer ${showLeftSidebar ? "bg-zinc-800 text-emerald-400" : "text-zinc-500 hover:text-zinc-300"}`}
+              title="Toggle Panel Struktur Kitab (Sidebar Kiri)"
+            >
+              {showLeftSidebar ? <PanelLeftClose size={14} /> : <PanelLeftOpen size={14} />}
+            </button>
+            <button
+              onClick={() => setShowRightSidebar(!showRightSidebar)}
+              className={`p-1.5 rounded transition cursor-pointer ${showRightSidebar ? "bg-zinc-800 text-emerald-400" : "text-zinc-500 hover:text-zinc-300"}`}
+              title="Toggle Panel Referensi Kamus (Sidebar Kanan)"
+            >
+              {showRightSidebar ? <PanelRightClose size={14} /> : <PanelRightOpen size={14} />}
+            </button>
+          </div>
+
           <div className="flex bg-zinc-900 border border-zinc-800 rounded p-0.5">
             <button
               onClick={() => setSplitViewMode(false)}
@@ -1117,7 +1769,17 @@ export default function App() {
       <div id="main-frame" className="flex flex-1 overflow-hidden">
         
         {/* SIDEBAR LEFT: Bab & Fasal Explorer */}
-        <aside id="sidebar-left" className="w-64 bg-[#111111] border-r border-zinc-900 flex flex-col select-none">
+        <AnimatePresence initial={false}>
+          {showLeftSidebar && (
+            <motion.aside
+              id="sidebar-left"
+              initial={{ width: 0, opacity: 0 }}
+              animate={{ width: 256, opacity: 1 }}
+              exit={{ width: 0, opacity: 0 }}
+              transition={{ duration: 0.3, ease: "easeInOut" }}
+              className="bg-[#111111] border-r border-zinc-900 flex flex-col select-none overflow-hidden h-full shrink-0"
+            >
+              <div className="w-64 h-full flex flex-col shrink-0">
           
           {/* Chapter Actions */}
           <div className="p-4 border-b border-zinc-900">
@@ -1285,7 +1947,10 @@ export default function App() {
               </div>
             </div>
           </div>
-        </aside>
+              </div>
+            </motion.aside>
+          )}
+        </AnimatePresence>
 
         {/* AREA TENGAH: Editor Utama & Workspace */}
         <main className="flex-1 flex flex-col bg-[#0a0a0a] overflow-hidden">
@@ -1949,46 +2614,118 @@ export default function App() {
                       </div>
 
                       {/* Editing / Inserting chosen word detail */}
-                      <div className="bg-[#171717] border border-zinc-850 p-3 rounded space-y-3">
+                      <div className="bg-[#171717] border border-zinc-850 p-3.5 rounded-xl space-y-3.5 shadow-md">
                         <div className="text-[11px] font-bold text-zinc-300 flex items-center justify-between">
-                          <span>{editingWordIndex !== null ? `Edit Makna Word #${editingWordIndex + 1}` : "Masukkan Makna Kata Sastra"}</span>
+                          <span>{editingWordIndex !== null ? `Mudarosah Kata #${editingWordIndex + 1}` : "Makna Per Kata (Sublinear)"}</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsQuickInputMode(!isQuickInputMode);
+                              showNotif(`Mode Input Cepat ${!isQuickInputMode ? "diaktifkan" : "dinonaktifkan"}!`, "info");
+                            }}
+                            className={`px-2 py-0.5.5 rounded text-[9px] font-bold transition flex items-center gap-1 cursor-pointer outline-none border ${
+                              isQuickInputMode
+                                ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+                                : "bg-zinc-800 text-zinc-400 border-zinc-700/60"
+                            }`}
+                            title="Konversi otomatis kode Latin pesantren ke Simbol I'rab Arab secara real-time"
+                          >
+                            <span className={`w-1.5 h-1.5 rounded-full ${isQuickInputMode ? "bg-emerald-400 animate-ping absolute" : "bg-zinc-500"}`} />
+                            {isQuickInputMode && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 relative" />}
+                            <span>Input Cepat: {isQuickInputMode ? "Aktif" : "Mati"}</span>
+                          </button>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className="grid grid-cols-2 gap-2.5">
                           <div className="space-y-1">
-                            <span className="text-[10px] text-zinc-500 block">Lafadz Arab:</span>
+                            <span className="text-[10px] text-zinc-500 block font-medium">Lafadz Arab:</span>
                             <div className="relative">
                               <input
                                 ref={wordArabicRef}
                                 type="text"
                                 value={wordArabic}
                                 onChange={(e) => setWordArabic(e.target.value)}
-                                className="w-full bg-[#202020] border border-zinc-800 rounded px-2.5 py-1 text-right font-serif text-sm text-zinc-100"
+                                className="w-full bg-[#202020] border border-zinc-805 rounded-lg px-2.5 py-1.5 text-right font-serif text-sm text-zinc-100 placeholder-zinc-700 focus:border-zinc-700 focus:ring-1 focus:ring-zinc-700/30"
                                 dir="rtl"
+                                placeholder="کلمة"
                               />
                             </div>
                           </div>
 
                           <div className="space-y-1">
-                            <span className="text-[10px] text-zinc-500 block">Kedudukan (I'rab/Sintaksis):</span>
-                            <input
-                              type="text"
-                              placeholder="cth: م (Mubtada'), خ (Khabar)"
-                              value={wordSymbol}
-                              onChange={(e) => setWordSymbol(e.target.value)}
-                              className="w-full bg-[#202020] border border-zinc-800 rounded px-2 py-1 text-[11px] text-zinc-100"
-                            />
+                            <span className="text-[10px] text-zinc-500 block font-medium">Kedudukan (I'rab/Simbol):</span>
+                            <div className="relative">
+                              <input
+                                type="text"
+                                placeholder={isQuickInputMode ? "Ketik 'm' + Spasi, dsb." : "cth: م, خ, ف"}
+                                value={wordSymbol}
+                                onChange={(e) => {
+                                  let val = e.target.value;
+                                  if (isQuickInputMode) {
+                                    // 1) Space-terminated shorthand check
+                                    if (val.endsWith(" ")) {
+                                      const trimmed = val.trim().toLowerCase();
+                                      if (QUICK_IRAB_MAP[trimmed]) {
+                                        setWordSymbol(QUICK_IRAB_MAP[trimmed].char);
+                                        showNotif(`Konversi otomatis: ${trimmed} ➜ ${QUICK_IRAB_MAP[trimmed].char} (${QUICK_IRAB_MAP[trimmed].name})`, "success");
+                                        return;
+                                      }
+                                    }
+                                  }
+                                  setWordSymbol(val);
+                                }}
+                                className="w-full bg-[#202020] border border-zinc-805 rounded-lg px-2.5 py-1.5 text-[11px] text-zinc-100 placeholder-zinc-650 focus:border-zinc-700 focus:ring-1 focus:ring-zinc-700/30 font-medium"
+                              />
+                            </div>
                           </div>
                         </div>
 
+                        {/* Interactive Board/Grid of I'rab Shortcuts when Quick Input is Enabled */}
+                        {isQuickInputMode && (
+                          <div className="bg-zinc-950/40 border border-zinc-900/60 rounded-lg p-2.5 space-y-2">
+                            <div className="flex justify-between items-center text-[9px]">
+                              <span className="font-bold uppercase tracking-wider text-zinc-500 flex items-center gap-1">
+                                <Sparkles size={10} className="text-amber-400 animate-pulse" />
+                                <span>Papan Klik Simbol Rab Cepat</span>
+                              </span>
+                              <span className="text-zinc-600">Klik tombol untuk tempel langsung</span>
+                            </div>
+                            <div className="grid grid-cols-3 gap-1.5 max-h-[145px] overflow-y-auto pr-1" style={{ scrollbarWidth: "thin" }}>
+                              {Object.entries(QUICK_IRAB_MAP)
+                                .filter(([key]) => ["m", "kh", "f", "maf", "n", "j", "h", "t", "g", "nb", "sh", "jw"].includes(key))
+                                .map(([key, item]) => (
+                                  <button
+                                    key={key}
+                                    type="button"
+                                    onClick={() => {
+                                      setWordSymbol(item.char);
+                                      showNotif(`Simbol I'rab: ${item.char} (${item.name}) diterapkan.`, "success");
+                                    }}
+                                    className="p-1 px-2 rounded bg-[#1f1f1f]/80 hover:bg-[#252525] border border-zinc-800 hover:border-emerald-500/40 text-left transition flex items-center justify-between cursor-pointer select-none"
+                                    title={`${item.desc} - ketik latin "${key}" lalu Spasi`}
+                                  >
+                                    <span className="text-[10.5px] font-bold text-emerald-400 font-serif leading-none">{item.char}</span>
+                                    <div className="text-right">
+                                      <span className="text-[7.5px] text-zinc-500 font-bold block leading-none font-mono">[{key}]</span>
+                                      <span className="text-[7px] text-zinc-400 transform scale-90 origin-right block leading-none truncate max-w-16 mt-0.5">{item.name}</span>
+                                    </div>
+                                  </button>
+                                ))}
+                            </div>
+                            <p className="text-[8.5px] text-zinc-500 italic mt-0.5 leading-normal">
+                              🧠 <strong className="text-zinc-400">Tips:</strong> Di kolom input Kedudukan di atas, Anda bisa mengetik pintasan seperti <code className="text-amber-400 font-mono font-bold bg-zinc-900 px-0.5 rounded">m</code> atau <code className="text-amber-400 font-mono font-bold bg-zinc-900 px-0.5 rounded">kh</code> lalu tekan tombol <strong className="text-zinc-400">Spasi</strong> untuk konversi otomatis!
+                            </p>
+                          </div>
+                        )}
+
                         <div className="space-y-1">
-                          <span className="text-[10px] text-zinc-500 block">Makna Jandul (Jenggot/Indonesia):</span>
+                          <span className="text-[10px] text-zinc-500 block font-medium">Makna Jandul (Jenggot/Indonesia):</span>
                           <input
                             type="text"
                             placeholder="cth: utawi sekabehane puji / segala puji"
                             value={wordMakna}
                             onChange={(e) => setWordMakna(e.target.value)}
-                            className="w-full bg-[#202020] border border-zinc-800 rounded px-2.5 py-1 text-[11px] text-zinc-200"
+                            className="w-full bg-[#202020] border border-zinc-805 rounded-lg px-2.5 py-1.5 text-[11px] text-zinc-200 placeholder-zinc-700/80 focus:border-zinc-700 focus:ring-1 focus:ring-zinc-700/30"
                           />
                         </div>
 
@@ -2041,8 +2778,17 @@ export default function App() {
         </main>
 
         {/* SIDEBAR RIGHT: Kamus Offline & Pencarian */}
-        {showRightSidebar && (
-          <aside id="sidebar-right" className="w-[340px] bg-[#111111] border-l border-zinc-900 flex flex-col select-none">
+        <AnimatePresence initial={false}>
+          {showRightSidebar && (
+            <motion.aside
+              id="sidebar-right"
+              initial={{ width: 0, opacity: 0 }}
+              animate={{ width: 340, opacity: 1 }}
+              exit={{ width: 0, opacity: 0 }}
+              transition={{ duration: 0.3, ease: "easeInOut" }}
+              className="bg-[#111111] border-l border-zinc-900 flex flex-col select-none overflow-hidden h-full shrink-0"
+            >
+              <div className="w-[340px] h-full flex flex-col shrink-0">
             
             {/* Nav tabs for search tool (Kamus vs Naskah search) */}
             <div className="p-4 border-b border-zinc-900 space-y-4">
@@ -2242,8 +2988,10 @@ export default function App() {
                 </div>
               </div>
             </div>
-          </aside>
-        )}
+              </div>
+            </motion.aside>
+          )}
+        </AnimatePresence>
       </div>
 
       {/* Floating Status Notification Alerts */}
@@ -2276,9 +3024,9 @@ export default function App() {
       {/* Modern Multi-Format Exporter Modal Dialog */}
       {showExportModal && (
         <div className="absolute inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 z-40 transition-all duration-300">
-          <div className="bg-[#121212] border border-zinc-800 rounded-xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+          <div className="bg-[#121212] border border-zinc-800 rounded-xl shadow-2xl w-full max-w-6xl h-[90vh] md:h-[85vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
             {/* Modal Header */}
-            <div className="px-6 py-4.5 bg-zinc-950 border-b border-zinc-900 flex items-center justify-between">
+            <div className="px-6 py-4 bg-zinc-950 border-b border-zinc-900 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
                   <Download size={16} />
@@ -2297,169 +3045,328 @@ export default function App() {
               </button>
             </div>
 
-            {/* Modal Content */}
-            <div className="p-6 space-y-5 text-xs">
-              {/* Step 1: Format Selection */}
-              <div className="space-y-2">
-                <label className="text-zinc-450 uppercase font-bold text-[10px] tracking-wider block">1. Pilih Format Berkas</label>
-                <div className="grid grid-cols-3 gap-2.5">
-                  <button
-                    onClick={() => setExportFormat("pdf")}
-                    className={`flex flex-col items-center gap-2.5 p-3.5 rounded-lg border text-center transition-all cursor-pointer ${
-                      exportFormat === "pdf"
-                        ? "bg-amber-950/15 border-amber-500/70 text-amber-300 shadow-lg shadow-amber-950/30"
-                        : "bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:bg-zinc-900"
-                    }`}
-                  >
-                    <div className="p-2 bg-amber-500/10 rounded-md">
-                      <span className="font-serif text-lg font-bold">PDF</span>
-                    </div>
-                    <div>
-                      <p className="font-bold text-[11px]">PDF Cetak</p>
-                      <p className="text-[9px] text-zinc-500 mt-0.5 leading-none">RTL-Sempurna</p>
-                    </div>
-                  </button>
+            {/* Mobile Tab Toggle */}
+            <div className="flex border-b border-zinc-900 bg-[#161616] md:hidden shrink-0">
+              <button
+                onClick={() => setExportMobileTab("options")}
+                className={`flex-1 py-3 flex items-center justify-center gap-2 font-semibold text-[11px] transition-colors ${
+                  exportMobileTab === "options"
+                    ? "border-b-2 border-emerald-500 bg-zinc-900/40 text-emerald-400 font-bold"
+                    : "text-zinc-400 hover:text-zinc-300"
+                }`}
+              >
+                <Sliders size={12} />
+                <span>Pengaturan Ekspor</span>
+              </button>
+              <button
+                onClick={() => setExportMobileTab("preview")}
+                className={`flex-1 py-3 flex items-center justify-center gap-2 font-semibold text-[11px] transition-colors ${
+                  exportMobileTab === "preview"
+                    ? "border-b-2 border-emerald-500 bg-zinc-900/40 text-emerald-400 font-bold"
+                    : "text-zinc-400 hover:text-zinc-300"
+                }`}
+              >
+                <Eye size={12} />
+                <span>Pratinjau Live HTML</span>
+              </button>
+            </div>
 
-                  <button
-                    onClick={() => setExportFormat("docx")}
-                    className={`flex flex-col items-center gap-2.5 p-3.5 rounded-lg border text-center transition-all cursor-pointer ${
-                      exportFormat === "docx"
-                        ? "bg-sky-950/15 border-sky-500/70 text-sky-300 shadow-lg shadow-sky-950/30"
-                        : "bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:bg-zinc-900"
-                    }`}
-                  >
-                    <div className="p-2 bg-sky-500/10 rounded-md">
-                      <span className="font-serif text-lg font-bold">DOCX</span>
-                    </div>
-                    <div>
-                      <p className="font-bold text-[11px]">Word Document</p>
-                      <p className="text-[9px] text-zinc-500 mt-0.5 leading-none">Bisa Diedit</p>
-                    </div>
-                  </button>
+            {/* Split Content Body */}
+            <div className="flex-1 flex flex-col md:flex-row overflow-hidden min-h-0">
+              
+              {/* Left Column: Form Settings */}
+              <div
+                className={`w-full md:w-[380px] overflow-y-auto border-r border-zinc-905 p-6 space-y-5 text-xs shrink-0 scroll-smooth ${
+                  exportMobileTab === "options" ? "block" : "hidden md:block"
+                }`}
+                style={{ scrollbarWidth: "thin" }}
+              >
+                {/* Step 1: Format Selection */}
+                <div className="space-y-2">
+                  <label className="text-zinc-450 uppercase font-bold text-[10px] tracking-wider block">1. Pilih Format Berkas</label>
+                  <div className="grid grid-cols-3 gap-2.5">
+                    <button
+                      onClick={() => setExportFormat("pdf")}
+                      className={`flex flex-col items-center gap-2 p-2.5 rounded-lg border text-center transition-all cursor-pointer ${
+                        exportFormat === "pdf"
+                          ? "bg-amber-950/15 border-amber-500/70 text-amber-300 shadow-lg shadow-amber-950/30"
+                          : "bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:bg-zinc-900"
+                      }`}
+                    >
+                      <div className="p-1 px-2.5 bg-amber-500/10 rounded-md">
+                        <span className="font-serif text-sm font-bold">PDF</span>
+                      </div>
+                      <div>
+                        <p className="font-bold text-[10.5px]">PDF Cetak</p>
+                        <p className="text-[8.5px] text-zinc-500 mt-0.5 leading-none">RTL-Sempurna</p>
+                      </div>
+                    </button>
 
-                  <button
-                    onClick={() => setExportFormat("html")}
-                    className={`flex flex-col items-center gap-2.5 p-3.5 rounded-lg border text-center transition-all cursor-pointer ${
-                      exportFormat === "html"
-                        ? "bg-emerald-950/15 border-emerald-500/70 text-emerald-300 shadow-lg shadow-emerald-950/30"
-                        : "bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:bg-zinc-900"
-                    }`}
-                  >
-                    <div className="p-2 bg-emerald-500/10 rounded-md">
-                      <span className="font-serif text-lg font-bold">HTML</span>
-                    </div>
-                    <div>
-                      <p className="font-bold text-[11px]">Web Page</p>
-                      <p className="text-[9px] text-zinc-500 mt-0.5 leading-none">Dokumen Mandiri</p>
-                    </div>
-                  </button>
+                    <button
+                      onClick={() => setExportFormat("docx")}
+                      className={`flex flex-col items-center gap-2 p-2.5 rounded-lg border text-center transition-all cursor-pointer ${
+                        exportFormat === "docx"
+                          ? "bg-sky-950/15 border-sky-500/70 text-sky-300 shadow-lg shadow-sky-950/30"
+                          : "bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:bg-zinc-900"
+                      }`}
+                    >
+                      <div className="p-1 px-2.5 bg-sky-500/10 rounded-md">
+                        <span className="font-serif text-sm font-bold">DOCX</span>
+                      </div>
+                      <div>
+                        <p className="font-bold text-[10.5px]">Word Doc</p>
+                        <p className="text-[8.5px] text-zinc-500 mt-0.5 leading-none">Bisa Diedit</p>
+                      </div>
+                    </button>
+
+                    <button
+                      onClick={() => setExportFormat("html")}
+                      className={`flex flex-col items-center gap-2 p-2.5 rounded-lg border text-center transition-all cursor-pointer ${
+                        exportFormat === "html"
+                          ? "bg-emerald-950/15 border-emerald-500/70 text-emerald-300 shadow-lg shadow-emerald-950/30"
+                          : "bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:bg-zinc-900"
+                      }`}
+                    >
+                      <div className="p-1 px-2.5 bg-emerald-500/10 rounded-md">
+                        <span className="font-serif text-sm font-bold">HTML</span>
+                      </div>
+                      <div>
+                        <p className="font-bold text-[10.5px]">Web Page</p>
+                        <p className="text-[8.5px] text-zinc-500 mt-0.5 leading-none">Mandiri</p>
+                      </div>
+                    </button>
+                  </div>
                 </div>
-              </div>
 
-              {/* Step 2: Scope Selection */}
-              <div className="space-y-2">
-                <label className="text-zinc-450 uppercase font-bold text-[10px] tracking-wider block">2. Tentukan Ruang Lingkup Ekspor</label>
-                <div className="grid grid-cols-2 gap-3">
-                  <label className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer select-none transition ${
-                    exportScope === "current" ? "bg-zinc-900 border-zinc-750 text-zinc-100" : "bg-zinc-950/50 border-zinc-900 text-zinc-400 hover:border-zinc-850"
-                  }`}>
-                    <input
-                      type="radio"
-                      name="export_scope"
-                      checked={exportScope === "current"}
-                      onChange={() => setExportScope("current")}
-                      className="rounded-full border-zinc-800 text-emerald-600 focus:ring-emerald-500 focus:ring-offset-0 bg-[#0d0d0d]"
-                    />
-                    <div className="leading-tight">
-                      <p className="font-bold text-[11px]">Bab Saat Ini</p>
-                      <p className="text-[9.5px] text-zinc-500 mt-0.5 truncate max-w-36">
-                        {currentChapter ? currentChapter.title : "Hanya bab aktif"}
-                      </p>
-                    </div>
-                  </label>
-
-                  <label className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer select-none transition ${
-                    exportScope === "all" ? "bg-zinc-900 border-zinc-750 text-zinc-100" : "bg-zinc-950/50 border-zinc-900 text-zinc-400 hover:border-zinc-850"
-                  }`}>
-                    <input
-                      type="radio"
-                      name="export_scope"
-                      checked={exportScope === "all"}
-                      onChange={() => setExportScope("all")}
-                      className="rounded-full border-zinc-800 text-emerald-600 focus:ring-emerald-500 focus:ring-offset-0 bg-[#0d0d0d]"
-                    />
-                    <div className="leading-tight">
-                      <p className="font-bold text-[11px]">Seluruh Kitab</p>
-                      <p className="text-[9.5px] text-zinc-500 mt-0.5">Semua bab, fasal ({totalChapters} Bab)</p>
-                    </div>
-                  </label>
-                </div>
-              </div>
-
-              {/* Step 3: Elements Filter */}
-              <div className="space-y-2">
-                <label className="text-zinc-450 uppercase font-bold text-[10px] tracking-wider block">3. Opsi Isi & Detail Tampilan</label>
-                <div className="bg-zinc-950/50 border border-zinc-900/60 rounded-lg p-3.5 space-y-2.5">
+                {/* Step 2: Scope Selection */}
+                <div className="space-y-2">
+                  <label className="text-zinc-450 uppercase font-bold text-[10px] tracking-wider block">2. Tentukan Ruang Lingkup Ekspor</label>
                   <div className="grid grid-cols-2 gap-3">
-                    <label className="flex items-center gap-2.5 text-zinc-400 hover:text-zinc-200 cursor-pointer select-none">
+                    <label className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer select-none transition ${
+                      exportScope === "current" ? "bg-zinc-900 border-zinc-750 text-zinc-100" : "bg-zinc-950/50 border-zinc-900 text-zinc-400 hover:border-zinc-850"
+                    }`}>
                       <input
-                        type="checkbox"
-                        checked={exportShowMakna}
-                        onChange={(e) => setExportShowMakna(e.target.checked)}
-                        className="rounded border-zinc-800 bg-[#0d0d0d] text-emerald-600 focus:ring-emerald-500/20"
+                        type="radio"
+                        name="export_scope"
+                        checked={exportScope === "current"}
+                        onChange={() => setExportScope("current")}
+                        className="rounded-full border-zinc-800 text-emerald-600 focus:ring-emerald-500 focus:ring-offset-0 bg-[#0d0d0d]"
                       />
-                      <span>Tampilkan Makna Jenggot</span>
+                      <div className="leading-tight">
+                        <p className="font-bold text-[10.5px]">Bab Saat Ini</p>
+                        <p className="text-[9px] text-zinc-500 mt-0.5 truncate max-w-[120px]">
+                          {currentChapter ? currentChapter.title : "Hanya bab aktif"}
+                        </p>
+                      </div>
                     </label>
 
-                    <label className="flex items-center gap-2.5 text-zinc-400 hover:text-zinc-200 cursor-pointer select-none">
+                    <label className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer select-none transition ${
+                      exportScope === "all" ? "bg-zinc-900 border-zinc-750 text-zinc-100" : "bg-zinc-950/50 border-zinc-900 text-zinc-400 hover:border-zinc-850"
+                    }`}>
                       <input
-                        type="checkbox"
-                        checked={exportShowSymbols}
-                        onChange={(e) => setExportShowSymbols(e.target.checked)}
-                        className="rounded border-zinc-800 bg-[#0d0d0d] text-emerald-600 focus:ring-emerald-500/20"
+                        type="radio"
+                        name="export_scope"
+                        checked={exportScope === "all"}
+                        onChange={() => setExportScope("all")}
+                        className="rounded-full border-zinc-800 text-emerald-600 focus:ring-emerald-500 focus:ring-offset-0 bg-[#0d0d0d]"
                       />
-                      <span>Simbol Kedudukan Nahwu</span>
-                    </label>
-
-                    <label className="flex items-center gap-2.5 text-zinc-400 hover:text-zinc-200 cursor-pointer select-none">
-                      <input
-                        type="checkbox"
-                        checked={exportShowTranslation}
-                        onChange={(e) => setExportShowTranslation(e.target.checked)}
-                        className="rounded border-zinc-800 bg-[#0d0d0d] text-emerald-600 focus:ring-emerald-500/20"
-                      />
-                      <span>Tampilkan Terjemahan Penuh</span>
-                    </label>
-
-                    <label className="flex items-center gap-2.5 text-zinc-400 hover:text-zinc-200 cursor-pointer select-none">
-                      <input
-                        type="checkbox"
-                        checked={exportShowNotes}
-                        onChange={(e) => setExportShowNotes(e.target.checked)}
-                        className="rounded border-zinc-800 bg-[#0d0d0d] text-emerald-600 focus:ring-emerald-500/20"
-                      />
-                      <span>Tampilkan Keterangan/Syarah</span>
+                      <div className="leading-tight">
+                        <p className="font-bold text-[10.5px]">Seluruh Kitab</p>
+                        <p className="text-[9px] text-zinc-500 mt-0.5">Semua bab ({totalChapters} Bab)</p>
+                      </div>
                     </label>
                   </div>
                 </div>
+
+                {/* Step 3: Elements Filter */}
+                <div className="space-y-2">
+                  <label className="text-zinc-450 uppercase font-bold text-[10px] tracking-wider block">3. Opsi Isi & Detail Tampilan</label>
+                  <div className="bg-zinc-950/50 border border-zinc-900/60 rounded-lg p-3.5 space-y-2.5">
+                    <div className="grid grid-cols-2 gap-3">
+                      <label className="flex items-center gap-2.5 text-zinc-400 hover:text-zinc-200 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={exportShowMakna}
+                          onChange={(e) => setExportShowMakna(e.target.checked)}
+                          className="rounded border-zinc-800 bg-[#0d0d0d] text-emerald-600 focus:ring-emerald-500/20"
+                        />
+                        <span>Makna Jenggot</span>
+                      </label>
+
+                      <label className="flex items-center gap-2.5 text-zinc-400 hover:text-zinc-200 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={exportShowSymbols}
+                          onChange={(e) => setExportShowSymbols(e.target.checked)}
+                          className="rounded border-zinc-800 bg-[#0d0d0d] text-emerald-600 focus:ring-emerald-500/20"
+                        />
+                        <span>Kedudukan Nahwu</span>
+                      </label>
+
+                      <label className="flex items-center gap-2.5 text-zinc-400 hover:text-zinc-200 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={exportShowTranslation}
+                          onChange={(e) => setExportShowTranslation(e.target.checked)}
+                          className="rounded border-zinc-800 bg-[#0d0d0d] text-emerald-600 focus:ring-emerald-500/20"
+                        />
+                        <span>Terjemahan</span>
+                      </label>
+
+                      <label className="flex items-center gap-2.5 text-zinc-400 hover:text-zinc-200 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={exportShowNotes}
+                          onChange={(e) => setExportShowNotes(e.target.checked)}
+                          className="rounded border-zinc-800 bg-[#0d0d0d] text-emerald-600 focus:ring-emerald-500/20"
+                        />
+                        <span>Catatan Samping</span>
+                      </label>
+                    </div>
+
+                    {/* Scholastic layers checkboxes block */}
+                    <div className="border-t border-zinc-900 pt-2.5 mt-2.5">
+                      <span className="text-[9.5px] uppercase font-bold tracking-widest text-emerald-450 block mb-2">Pilih Lapisan Kitab Kuning</span>
+                      <div className="grid grid-cols-2 gap-2.5">
+                        <label className="flex items-center gap-2.5 text-zinc-450 hover:text-zinc-200 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={exportShowMatan}
+                            onChange={(e) => setExportShowMatan(e.target.checked)}
+                            className="rounded border-zinc-850 bg-[#0d0d0d] text-rose-600 focus:ring-rose-500/20"
+                          />
+                          <span>Matan (Utama)</span>
+                        </label>
+                        
+                        <label className="flex items-center gap-2.5 text-zinc-450 hover:text-zinc-200 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={exportShowSyarah}
+                            onChange={(e) => setExportShowSyarah(e.target.checked)}
+                            className="rounded border-zinc-850 bg-[#0d0d0d] text-emerald-600 focus:ring-emerald-500/20"
+                          />
+                          <span>Syarah (Penjelas)</span>
+                        </label>
+
+                        <label className="flex items-center gap-2.5 text-zinc-450 hover:text-zinc-200 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={exportShowHasyiyah}
+                            onChange={(e) => setExportShowHasyiyah(e.target.checked)}
+                            className="rounded border-zinc-850 bg-[#0d0d0d] text-purple-600 focus:ring-purple-500/20"
+                          />
+                          <span>Hasyiyah</span>
+                        </label>
+
+                        <label className="flex items-center gap-2.5 text-zinc-450 hover:text-zinc-200 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={exportShowTaliq}
+                            onChange={(e) => setExportShowTaliq(e.target.checked)}
+                            className="rounded border-zinc-850 bg-[#0d0d0d] text-amber-600 focus:ring-amber-500/20"
+                          />
+                          <span>Ta'liq (Koreksi)</span>
+                        </label>
+                      </div>
+                    </div>
+
+                    {/* Classical style customization checkbox */}
+                    <div className="border-t border-zinc-900 pt-2.5 mt-2.5">
+                      <span className="text-[9.5px] uppercase font-bold tracking-widest text-[#abafb5] block mb-2">Tema & Seni Desain</span>
+                      <label className="flex items-start gap-2.5 p-2 rounded-lg bg-amber-950/10 border border-amber-900/20 text-amber-300 hover:text-amber-200 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={exportStyleKitabKuning}
+                          onChange={(e) => setExportStyleKitabKuning(e.target.checked)}
+                          className="rounded border-amber-700 bg-[#0d0d0d] text-amber-600 focus:ring-amber-500/20 mt-0.5"
+                        />
+                        <div className="leading-snug">
+                          <p className="font-bold text-[10px]">Gaya Kitab Kuning Klasik</p>
+                          <p className="text-[8px] text-amber-400/80 mt-0.5 leading-snug">Menerapkan kertas krem kekuningan antik, bingkai border Arab, dan multi-komentar pesantren.</p>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+                </div>
               </div>
+
+              {/* Right Column: Interactive Live Preview Panel */}
+              <div
+                className={`flex-1 bg-[#161616] flex flex-col min-h-0 overflow-hidden relative ${
+                  exportMobileTab === "preview" ? "flex" : "hidden md:flex"
+                }`}
+              >
+                {/* Live Preview Toolbar banner */}
+                <div className="px-5 py-3 bg-zinc-950/80 border-b border-zinc-900 flex items-center justify-between shrink-0">
+                  <div className="flex items-center gap-2">
+                    <span className="flex h-2 w-2 relative">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                    </span>
+                    <span className="text-zinc-300 font-bold tracking-wide uppercase text-[10px]">Pratinjau Live Tata Letak</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[9px] px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-400 shadow-xs uppercase tracking-wider font-mono">
+                      {exportFormat}
+                    </span>
+                    <span className="text-[9px] px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-400 shadow-xs uppercase tracking-wider font-mono">
+                      {exportScope === "all" ? "Seluruh Kitab" : "Bab Aktif"}
+                    </span>
+                    <button 
+                      onClick={() => {
+                        showNotif("Pratinjau diperbarui secara instan!", "info");
+                      }}
+                      className="p-1 hover:bg-zinc-850 rounded text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer"
+                      title="Perbarui Pratinjau"
+                    >
+                      <RefreshCw size={11} className="animate-spin-slow" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Sub-toolbar note */}
+                <div className="bg-zinc-900/40 border-b border-zinc-950 px-5 py-2 flex items-center justify-between text-[10px] text-zinc-500 shrink-0">
+                  <span>Tata letak di bawah ini mewakili berkas akhir dokumen HTML dan PDF yang diunduh.</span>
+                  <span className="text-amber-500/80 flex items-center gap-1 font-semibold">
+                    <Sparkles size={11} />
+                    Live Render
+                  </span>
+                </div>
+
+                {/* Live Sandbox Container */}
+                <div className="flex-1 p-5 bg-[#0a0a0a] overflow-hidden flex items-center justify-center">
+                  <div className="w-full h-full rounded-lg border border-zinc-800/80 bg-[#121212] flex flex-col overflow-hidden shadow-2xl relative">
+                    <iframe
+                      srcDoc={generatePreviewHtml()}
+                      title="Scribe Pro Kitab Kuning Live Preview"
+                      className="w-full h-full bg-white border-0"
+                      referrerPolicy="no-referrer"
+                    />
+                  </div>
+                </div>
+              </div>
+
             </div>
 
-            {/* Modal Actions */}
-            <div className="px-6 py-4 bg-zinc-950 border-t border-zinc-900 flex justify-end gap-2.5">
-              <button
-                onClick={() => setShowExportModal(false)}
-                className="px-4 py-2 border border-zinc-800 hover:bg-zinc-900 text-zinc-400 hover:text-zinc-200 rounded-lg font-medium transition cursor-pointer"
-              >
-                Batal
-              </button>
-              <button
-                onClick={handleRunExport}
-                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-semibold flex items-center gap-1.5 shadow-md shadow-emerald-950/20 transition cursor-pointer"
-              >
-                <Download size={14} />
-                <span>Unduh File</span>
-              </button>
+            {/* Modal Actions Footer */}
+            <div className="px-6 py-4 bg-zinc-950 border-t border-zinc-900 flex justify-between items-center shrink-0">
+              <span className="text-[10px] text-zinc-500 italic hidden sm:block">Perubahan opsi di sisi kiri akan diperbarui secara langsung di panel pratinjau.</span>
+              <span className="text-[10px] text-zinc-500 italic block sm:hidden">Desain diperbarui secara langsung.</span>
+              <div className="flex gap-2.5">
+                <button
+                  onClick={() => setShowExportModal(false)}
+                  className="px-4 py-2 border border-zinc-800 hover:bg-zinc-900 text-zinc-400 hover:text-zinc-200 rounded-lg text-xs font-semibold transition cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  onClick={handleRunExport}
+                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-md shadow-emerald-950/20 transition cursor-pointer"
+                >
+                  <Download size={13} />
+                  <span>Unduh Berkas</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
