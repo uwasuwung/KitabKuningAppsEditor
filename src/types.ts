@@ -14,8 +14,12 @@ export interface KitabLine {
   id: string;
   arabicFull: string;       // Full raw sentence for RTL flow
   translationFull: string;  // Full translation in Indonesian / Pegon
-  notes: string;            // Additional explanation / Syarah / Margin notes
+  notes: string;            // Additional explanation / Syarah / Margin notes (general/fallback)
   words: WordNode[];        // Word-by-word granularity
+  matan?: string;           // Matan (Teks utama rujukan)
+  syarah?: string;          // Syarah (Uraian penjelasan dari matan)
+  hasyiyah?: string;        // Hasyiyah (Super-commentary atas syarah)
+  taliq?: string;           // Ta'liq (Anotasi/catatan pinggir ringkas)
 }
 
 export interface KitabSection {
@@ -58,7 +62,11 @@ export interface UserConfig {
   theme: "light" | "dark";
   showWordMakna: boolean;
   showFullTranslation: boolean;
-  showNotes: boolean;
+  showNotes: boolean; // default legacy general notes toggle
+  showMatan?: boolean;
+  showSyarah?: boolean;
+  showHasyiyah?: boolean;
+  showTaliq?: boolean;
   fontSizeArabic: number; // in pixels
   fontSizeTranslation: number; // in pixels
   keyboardLayout: "indonesian-arabic" | "transliteration";

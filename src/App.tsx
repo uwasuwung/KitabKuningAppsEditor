@@ -127,6 +127,10 @@ export default function App() {
   const [lineArabicInput, setLineArabicInput] = useState<string>("");
   const [lineTranslationInput, setLineTranslationInput] = useState<string>("");
   const [lineNotesInput, setLineNotesInput] = useState<string>("");
+  const [lineMatanInput, setLineMatanInput] = useState<string>("");
+  const [lineSyarahInput, setLineSyarahInput] = useState<string>("");
+  const [lineHasyiyahInput, setLineHasyiyahInput] = useState<string>("");
+  const [lineTaliqInput, setLineTaliqInput] = useState<string>("");
   const [lineWords, setLineWords] = useState<WordNode[]>([]);
 
   // --- Sublinear Word Editor state ---
@@ -214,12 +218,20 @@ export default function App() {
       setLineArabicInput(activeLine.arabicFull);
       setLineTranslationInput(activeLine.translationFull);
       setLineNotesInput(activeLine.notes);
+      setLineMatanInput(activeLine.matan || "");
+      setLineSyarahInput(activeLine.syarah || "");
+      setLineHasyiyahInput(activeLine.hasyiyah || "");
+      setLineTaliqInput(activeLine.taliq || "");
       setLineWords(activeLine.words || []);
       setEditingWordIndex(null);
     } else {
       setLineArabicInput("");
       setLineTranslationInput("");
       setLineNotesInput("");
+      setLineMatanInput("");
+      setLineSyarahInput("");
+      setLineHasyiyahInput("");
+      setLineTaliqInput("");
       setLineWords([]);
       setEditingWordIndex(null);
     }
@@ -501,6 +513,10 @@ export default function App() {
       arabicFull: "بِسْمِ اللّٰهِ الرَّحْمٰنِ الرَّحِيْمِ",
       translationFull: "Dengan menyebut nama Allah yang Maha Pengasih lagi Maha Penyayang.",
       notes: "Basmalah sebagai pembuka kitab.",
+      matan: "",
+      syarah: "",
+      hasyiyah: "",
+      taliq: "",
       words: [
         { id: `w-${Date.now()}-1`, arabic: "بِسْمِ", makna: "kelawan nyebut asmo", symbol: "ع" },
         { id: `w-${Date.now()}-2`, arabic: "اللَّهِ", makna: "ing utawi Allah", symbol: "مض" }
@@ -527,6 +543,7 @@ export default function App() {
 
     setActiveLineId(newLineId);
     showNotif("Baris teks baru draf ditambahkan!", "success");
+    saveToLocalStorage();
   }
 
   function handleSaveActiveLine() {
@@ -552,6 +569,10 @@ export default function App() {
                         arabicFull: lineArabicInput,
                         translationFull: lineTranslationInput,
                         notes: lineNotesInput,
+                        matan: lineMatanInput,
+                        syarah: lineSyarahInput,
+                        hasyiyah: lineHasyiyahInput,
+                        taliq: lineTaliqInput,
                         words: lineWords
                       };
                     }
@@ -1318,6 +1339,60 @@ export default function App() {
                   />
                   <span className="text-zinc-400 font-medium">Tampilkan Terjemahan Penuh</span>
                 </label>
+
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={config.showNotes}
+                    onChange={(e) => setConfig({ ...config, showNotes: e.target.checked })}
+                    className="rounded border-zinc-850 text-emerald-600 focus:ring-emerald-500 focus:ring-opacity-25"
+                  />
+                  <span className="text-zinc-400 font-medium">Tampilkan Struktur Syarah & Catatan</span>
+                </label>
+
+                {config.showNotes && (
+                  <div className="pl-5 space-y-2 border-l border-zinc-800 flex flex-col pt-0.5">
+                    <label className="flex items-center gap-2 cursor-pointer text-xs">
+                      <input
+                        type="checkbox"
+                        checked={config.showMatan !== false}
+                        onChange={(e) => setConfig({ ...config, showMatan: e.target.checked })}
+                        className="rounded border-zinc-850 text-amber-500 focus:ring-amber-500 focus:ring-opacity-25"
+                      />
+                      <span className="text-zinc-450">Tampilkan Matan (متن)</span>
+                    </label>
+
+                    <label className="flex items-center gap-2 cursor-pointer text-xs">
+                      <input
+                        type="checkbox"
+                        checked={config.showSyarah !== false}
+                        onChange={(e) => setConfig({ ...config, showSyarah: e.target.checked })}
+                        className="rounded border-zinc-850 text-emerald-500 focus:ring-emerald-500 focus:ring-opacity-25"
+                      />
+                      <span className="text-zinc-455">Tampilkan Syarah (شرح)</span>
+                    </label>
+
+                    <label className="flex items-center gap-2 cursor-pointer text-xs">
+                      <input
+                        type="checkbox"
+                        checked={config.showHasyiyah !== false}
+                        onChange={(e) => setConfig({ ...config, showHasyiyah: e.target.checked })}
+                        className="rounded border-zinc-850 text-indigo-500 focus:ring-indigo-500 focus:ring-opacity-25"
+                      />
+                      <span className="text-zinc-455">Tampilkan Hasyiyah (حاشية)</span>
+                    </label>
+
+                    <label className="flex items-center gap-2 cursor-pointer text-xs">
+                      <input
+                        type="checkbox"
+                        checked={config.showTaliq !== false}
+                        onChange={(e) => setConfig({ ...config, showTaliq: e.target.checked })}
+                        className="rounded border-zinc-850 text-rose-500 focus:ring-rose-500 focus:ring-opacity-25"
+                      />
+                      <span className="text-zinc-455">Tampilkan Ta'liq (تعليق)</span>
+                    </label>
+                  </div>
+                )}
               </div>
 
               <button
@@ -1509,15 +1584,56 @@ export default function App() {
                           </div>
                         )}
 
-                        {/* Footnotes / Syarah annotations */}
-                        {config.showNotes && line.notes && (
-                          <div className="mt-2 text-xs text-zinc-550 flex items-start gap-2 border-t border-zinc-900 pt-2" dir="ltr">
-                            <span className="text-[10px] font-semibold text-[#8b5cf6] bg-[#8b5cf6]/10 border border-[#8b5cf6]/20 px-1 py-0.1 rounded mt-0.5">
-                              SYARAH
-                            </span>
-                            <p className="font-sans italic leading-relaxed text-zinc-500">
-                              {line.notes}
-                            </p>
+                        {/* Scholastic structure layers (Matan, Syarah, Hasyiyah, Ta'liq) */}
+                        {config.showNotes && (
+                          <div className="mt-2 space-y-2 border-t border-zinc-900 pt-2 flex flex-col gap-1.5" dir="ltr">
+                            {/* 1. Matan */}
+                            {((config.showMatan !== false) && line.matan) && (
+                              <div className="text-xs flex items-start gap-2">
+                                <span className="text-[9px] tracking-wider font-extrabold text-amber-500 bg-amber-950/40 border border-amber-900/40 px-1.5 py-0.5 rounded leading-none mt-0.5">
+                                  MATAN
+                                </span>
+                                <p className="font-sans leading-relaxed text-amber-200/90 font-medium">
+                                  {line.matan}
+                                </p>
+                              </div>
+                            )}
+
+                            {/* 2. Syarah (fallback to notes if syarah is not populated yet) */}
+                            {((config.showSyarah !== false) && (line.syarah || line.notes)) && (
+                              <div className="text-xs flex items-start gap-2">
+                                <span className="text-[10px] tracking-wider font-extrabold text-emerald-500 bg-emerald-950/40 border border-emerald-900/40 px-1.5 py-0.5 rounded leading-none mt-0.5">
+                                  SYARAH
+                                </span>
+                                <p className="font-sans leading-relaxed text-zinc-350">
+                                  {line.syarah || line.notes}
+                                </p>
+                              </div>
+                            )}
+
+                            {/* 3. Hasyiyah */}
+                            {((config.showHasyiyah !== false) && line.hasyiyah) && (
+                              <div className="text-xs flex items-start gap-2 pl-2 border-l border-indigo-900/60 bg-indigo-950/10 py-1 rounded">
+                                <span className="text-[9px] tracking-wider font-extrabold text-indigo-400 bg-indigo-950/50 border border-indigo-900/40 px-1.5 py-0.5 rounded leading-none mt-0.5">
+                                  HASYIYAH
+                                </span>
+                                <p className="font-sans italic leading-relaxed text-zinc-400">
+                                  {line.hasyiyah}
+                                </p>
+                              </div>
+                            )}
+
+                            {/* 4. Ta'liq */}
+                            {((config.showTaliq !== false) && line.taliq) && (
+                              <div className="text-[11px] flex items-start gap-2 bg-rose-950/5 py-1 px-1 rounded border border-rose-950/10">
+                                <span className="text-[8px] tracking-wider font-extrabold text-rose-400 bg-rose-950/30 border border-rose-900/30 px-1.5 py-0.5 rounded leading-none mt-0.5">
+                                  TA'LIQ
+                                </span>
+                                <p className="font-sans leading-relaxed text-zinc-500 italic">
+                                  {line.taliq}
+                                </p>
+                              </div>
+                            )}
                           </div>
                         )}
 
@@ -1677,16 +1793,79 @@ export default function App() {
                       />
                     </div>
 
-                    {/* Notes Box Form */}
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-semibold text-zinc-400 block">Catatan Tambahan / Syarah Penjelas</label>
-                      <textarea
-                        value={lineNotesInput}
-                        onChange={(e) => setLineNotesInput(e.target.value)}
-                        placeholder="Pembahasan tatabahasa, perbandingan mazhab pesantren dsb..."
-                        className="w-full bg-[#161616] border border-zinc-800/80 rounded p-2.5 text-xs text-zinc-200 focus:outline-none"
-                        rows={2}
-                      />
+                    {/* Scholastic Commentary Layers Form */}
+                    <div className="space-y-3.5 border-t border-zinc-900 pt-3">
+                      <span className="text-[10px] uppercase font-bold tracking-widest text-zinc-400 block">
+                        Kategori & Struktur Syarah (Kitab Kuning)
+                      </span>
+
+                      {/* 1. Matan */}
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[9px] tracking-wider font-extrabold text-amber-500 bg-amber-950/40 border border-amber-900/40 px-1 py-0.2 rounded leading-none">
+                            MATAN (متن)
+                          </span>
+                          <span className="text-[10px] text-zinc-500">Teks dasar/inti yang dirujuk</span>
+                        </div>
+                        <input
+                          type="text"
+                          value={lineMatanInput}
+                          onChange={(e) => setLineMatanInput(e.target.value)}
+                          placeholder="Kutipan ungkapan pokok dari teks mukhtashar/matan..."
+                          className="w-full bg-[#161616] border border-zinc-800/80 rounded p-2 text-xs text-zinc-200 focus:border-amber-600 focus:outline-none"
+                        />
+                      </div>
+
+                      {/* 2. Syarah */}
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[9px] tracking-wider font-extrabold text-emerald-500 bg-emerald-950/40 border border-emerald-900/40 px-1 py-0.2 rounded leading-none">
+                            SYARAH (شرح)
+                          </span>
+                          <span className="text-[10px] text-zinc-500">Uraian ulasan penjelas utama</span>
+                        </div>
+                        <textarea
+                          value={lineNotesInput}
+                          onChange={(e) => setLineNotesInput(e.target.value)}
+                          placeholder="Penjelasan gramatika, makna luas, pandangan madzhab dll..."
+                          className="w-full bg-[#161616] border border-zinc-800/80 rounded p-2 text-xs text-zinc-205 focus:border-emerald-600 focus:outline-none"
+                          rows={2}
+                        />
+                      </div>
+
+                      {/* 3. Hasyiyah */}
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[9px] tracking-wider font-extrabold text-indigo-400 bg-indigo-950/40 border border-indigo-900/50 px-1 py-0.2 rounded leading-none">
+                            HASYIYAH (حاشية)
+                          </span>
+                          <span className="text-[10px] text-zinc-500">Super-komentar / penjelasan mendalam atas Syarah</span>
+                        </div>
+                        <textarea
+                          value={lineHasyiyahInput}
+                          onChange={(e) => setLineHasyiyahInput(e.target.value)}
+                          placeholder="Catatan tambahan mendalam dari mualif hasyiah (ulasan sekunder)..."
+                          className="w-full bg-[#161616] border border-zinc-800/80 rounded p-2 text-xs text-zinc-200 focus:border-indigo-600 focus:outline-none"
+                          rows={2}
+                        />
+                      </div>
+
+                      {/* 4. Ta'liq */}
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[9px] tracking-wider font-extrabold text-[#f43f5e] bg-rose-955/35 border border-rose-900/40 px-1 py-0.2 rounded leading-none">
+                            TA'LIQ (تعليق)
+                          </span>
+                          <span className="text-[10px] text-zinc-500">Anotasi ringkas / catatan kaki koreksi</span>
+                        </div>
+                        <input
+                          type="text"
+                          value={lineTaliqInput}
+                          onChange={(e) => setLineTaliqInput(e.target.value)}
+                          placeholder="Tanda korektif, ringkasan margin, atau catatan kaki..."
+                          className="w-full bg-[#161616] border border-zinc-800/80 rounded p-2 text-xs text-zinc-200 focus:border-rose-600 focus:outline-none"
+                        />
+                      </div>
                     </div>
 
                     {/* Sublinear Word breakdowns editor list */}
